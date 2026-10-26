@@ -142,13 +142,13 @@ struct TodayDashboard: View {
         HStack(spacing: Theme.Spacing.small) {
             MetricCard(title: L.t("today.kpi.shortcutUses"),
                        value: metrics.shortcutUses,
-                       definition: MetricDefinition.shortcutUses)
+                       definition: L.t(MetricDefinition.shortcutUses))
             MetricCard(title: L.t("today.kpi.appsUsed"),
                        value: metrics.appsUsed,
-                       definition: MetricDefinition.appsUsed)
+                       definition: L.t(MetricDefinition.appsUsed))
             MetricCard(title: L.t("today.kpi.managed"),
                        value: metrics.managedHotkeyTriggers,
-                       definition: MetricDefinition.managedTriggers)
+                       definition: L.t(MetricDefinition.managedTriggers))
         }
     }
 
@@ -181,7 +181,7 @@ struct TodayDashboard: View {
         Card {
             VStack(alignment: .leading, spacing: Theme.Spacing.small) {
                 SectionHeader(title: L.t("today.topApps"),
-                              subtitle: MetricDefinition.topAppsMetric)
+                              subtitle: L.t(MetricDefinition.topAppsMetric))
                 if metrics.topApps.isEmpty {
                     EmptyStateView(symbol: "app.dashed", title: L.t("common.empty"))
                 } else {

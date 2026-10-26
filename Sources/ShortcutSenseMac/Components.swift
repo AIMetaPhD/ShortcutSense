@@ -200,6 +200,12 @@ struct ShortcutHeatmap: View {
         map["delete"] = 51; map["-"] = 27; map["="] = 24
         map["["] = 33; map["]"] = 30; map["\\"] = 42
         map[";"] = 41; map["'"] = 39; map[","] = 43; map["."] = 47; map["/"] = 44
+        // Modifiers and arrows have virtual key codes too, so the modifier row can
+        // light up when a recorded combination uses it. Without these the caps could
+        // never be highlighted and the figure would understate real usage.
+        map["command"] = 55; map["shift"] = 56; map["option"] = 58; map["control"] = 59
+        map["caps"] = 57; map["fn"] = 63
+        map["left"] = 123; map["right"] = 124; map["down"] = 125; map["up"] = 126
         return map
     }()
 
@@ -279,7 +285,7 @@ struct ShortcutHeatmap: View {
                   ? "\(hit.combos.joined(separator: ", ")) — \(hit.count) uses"
                   : "")
             .accessibilityLabel(hit.count > 0
-                ? "\(displayLabel(label)): \(hit.count) shortcut uses"
+                ? "\(displayLabel(label)): \(hit.count) \(L.t("chart.dayShortcut"))"
                 : displayLabel(label))
     }
 
@@ -306,13 +312,13 @@ struct ShortcutHeatmap: View {
 
     private var legend: some View {
         HStack(spacing: 6) {
-            Text("less").font(.system(size: 9)).foregroundStyle(.tertiary)
+            Text(L.t("chart.less")).font(.system(size: 9)).foregroundStyle(.tertiary)
             ForEach(0..<Theme.heatRamp.count, id: \.self) { index in
                 RoundedRectangle(cornerRadius: 2)
                     .fill(Theme.heatRamp[index])
                     .frame(width: 14, height: 8)
             }
-            Text("more").font(.system(size: 9)).foregroundStyle(.tertiary)
+            Text(L.t("chart.more")).font(.system(size: 9)).foregroundStyle(.tertiary)
             Spacer()
             Text(L.t("today.heatmapCaption"))
                 .font(.system(size: 9))
@@ -402,7 +408,7 @@ struct ActivityTimeline: View {
                 }
                 .frame(maxWidth: .infinity)
                 .accessibilityElement(children: .combine)
-                .accessibilityLabel("\(day.date): \(day.keypresses) keystrokes")
+                .accessibilityLabel("\(day.date): \(day.keypresses) \(L.t("metric.keypresses"))")
             }
         }
         .frame(height: 132)
@@ -462,7 +468,7 @@ struct AppRankRow: View {
             }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(name), \(app.keystrokes) keystrokes")
+        .accessibilityLabel("\(name), \(app.keystrokes) \(L.t("metric.topApps"))")
     }
 }
 

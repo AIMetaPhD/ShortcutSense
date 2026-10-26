@@ -8,17 +8,30 @@ final class WeeklyModel: ObservableObject {
     @Published private(set) var report: WeeklyReport?
     @Published private(set) var error: String?
     @Published private(set) var firstCollectionAt: Date?
-    @Published private(set) var daysCollected: Double = 0
+    /// Elapsed time since the first collection. **Not** the number of days that have
+    /// data: a Mac that was asleep for a week has elapsed days but no records.
+    @Published private(set) var daysSinceFirstCollection: Double = 0
+    /// Distinct day buckets that actually hold a record.
+    @Published private(set) var daysWithData: Int = 0
     @Published var generating = false
 
     func reload() {
         let service = AppController.shared.weeklyService
         firstCollectionAt = AppController.shared.store.firstCollectionStartedAt()
         if let first = firstCollectionAt {
-            daysCollected = Date().timeIntervalSince(first) / 86_400
+            daysSinceFirstCollection = Date().timeIntervalSince(first) / 86_400
         } else {
-            daysCollected = 0
+            daysSinceFirstCollection = 0
         }
+        let window = DateBuckets.rollingWindow(
+            endingAt: Date(), days: 7,
+            timeZone: AppController.shared.store.collectionTimeZone)
+        let rows = (try? AppController.shared.store.dailyActivity(
+            from: window.buckets.first ?? "", to: window.buckets.last ?? "")) ?? []
+        daysWithData = Set(rows.filter {
+            $0.totalAnonymousKeystrokes > 0 || $0.observedKeyboardNavigation > 0
+                || $0.unknownOriginActivations > 0 || $0.managedHotkeyActivations > 0
+        }.map(\.date)).count
         do {
             report = try service.generateIfNeeded().report
             error = nil
@@ -168,8 +181,8 @@ struct WeeklyDashboard: View {
                 Text(L.isChinese ? "覆盖范围" : "Coverage").font(Theme.Font.sectionTitle)
                 if let first = model.firstCollectionAt {
                     Text(L.isChinese
-                         ? "首次采集于 \(first.formatted())，已采集 \(String(format: "%.1f", model.daysCollected)) 天。"
-                         : "First collection \(first.formatted()); \(String(format: "%.1f", model.daysCollected)) days collected.")
+                         ? "首次采集于 \(first.formatted())，至今 \(String(format: "%.1f", model.daysSinceFirstCollection)) 天。有数据的天数：\(model.daysWithData)。"
+                         : "First collection \(first.formatted()); \(String(format: "%.1f", model.daysSinceFirstCollection)) days ago. Days with data: \(model.daysWithData).")
                         .font(Theme.Font.caption)
                         .foregroundStyle(.secondary)
                 } else {
