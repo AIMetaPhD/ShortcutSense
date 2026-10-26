@@ -74,6 +74,25 @@ public func XCTAssertEqual<T: Equatable>(_ lhs: @autoclosure () throws -> T,
     }
 }
 
+/// Floating-point comparison with a tolerance, as XCTest provides.
+public func XCTAssertEqual<T: FloatingPoint>(_ lhs: @autoclosure () throws -> T,
+                                             _ rhs: @autoclosure () throws -> T,
+                                             accuracy: T,
+                                             _ message: @autoclosure () -> String = "",
+                                             file: StaticString = #filePath, line: UInt = #line) {
+    do {
+        let left = try lhs()
+        let right = try rhs()
+        if abs(left - right) > accuracy {
+            TestReporter.shared.recordFailure(
+                "XCTAssertEqual failed: \"\(left)\" is not equal to \"\(right)\" within \(accuracy) - \(message())",
+                file: "\(file)", line: line)
+        }
+    } catch {
+        TestReporter.shared.recordFailure("XCTAssertEqual threw \(error)", file: "\(file)", line: line)
+    }
+}
+
 public func XCTAssertNotEqual<T: Equatable>(_ lhs: @autoclosure () throws -> T,
                                             _ rhs: @autoclosure () throws -> T,
                                             _ message: @autoclosure () -> String = "",
