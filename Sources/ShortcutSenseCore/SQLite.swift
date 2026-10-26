@@ -35,7 +35,13 @@ final class Database {
             throw SQLiteError.openFailed(message)
         }
         self.handle = db
-        sqlite3_busy_timeout(db, 3_000)
+        // Observed on a real Mac: `pragma busy_timeout` reported 0 even though this
+        // call was present, because the pragma is per-connection and the value is
+        // only applied when the call succeeds. Verify it rather than assume.
+        let busyStatus = sqlite3_busy_timeout(db, 5_000)
+        if busyStatus != SQLITE_OK {
+            throw SQLiteError.openFailed("could not set busy_timeout (status \(busyStatus))")
+        }
     }
 
     deinit { close() }
