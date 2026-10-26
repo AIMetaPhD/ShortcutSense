@@ -1,3 +1,4 @@
+import AppKit
 import ApplicationServices
 import Carbon.HIToolbox
 import CoreGraphics
@@ -85,6 +86,22 @@ enum Permissions {
         guard let session = CGSessionCopyCurrentDictionary() as? [String: Any] else { return true }
         if let locked = session["CGSSessionScreenIsLocked"] as? Bool, locked { return true }
         return false
+    }
+
+    /// Opens the Input Monitoring pane. Kept here so the same deep link is used from
+    /// the menu, the panel and Settings.
+    static func openInputMonitoringSettings() {
+        guard let url = URL(string:
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent")
+        else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    static func openAccessibilitySettings() {
+        guard let url = URL(string:
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+        else { return }
+        NSWorkspace.shared.open(url)
     }
 
     static func snapshot() -> PermissionSnapshot {

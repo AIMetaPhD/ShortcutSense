@@ -1,17 +1,25 @@
 import AppKit
+import SwiftUI
 import ShortcutSenseCore
 
+/// App shell: `NSStatusItem` → compact popover → standalone dashboard window.
+///
+/// The status item uses `NSPopover` with a SwiftUI panel so the compact surface is
+/// real UI rather than a menu of commands, as the v2.1 spec requires.
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var statusItem: NSStatusItem?
+    private var popover: NSPopover?
     private var window: NSWindow?
+    private let panelModel = TodayModel()
+    private var pendingSection: RootView.Section = .today
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         setUpStatusItem()
         Task { @MainActor in
-            AppController.shared.onStateChange = { [weak self] in self?.refreshMenu() }
+            AppController.shared.onStateChange = { [weak self] in self?.refreshStatusItem() }
             AppController.shared.start()
-            self.refreshMenu()
+            self.refreshStatusItem()
             self.showFirstRunIfNeeded()
         }
     }
@@ -20,77 +28,74 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task { @MainActor in AppController.shared.stop() }
     }
 
-    // MARK: - Status item
+    // MARK: - Status item and popover
 
     private func setUpStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         item.button?.image = NSImage(systemSymbolName: "command",
-                                     accessibilityDescription: "ShortcutSense")
+                                     accessibilityDescription: L.t("app.name"))
         item.button?.image?.isTemplate = true
+        item.button?.target = self
+        item.button?.action = #selector(togglePopover(_:))
+        item.button?.setAccessibilityLabel(L.t("app.name"))
         statusItem = item
-        refreshMenu()
+
+        let popover = NSPopover()
+        popover.behavior = .transient
+        popover.delegate = self
+        let panel = MenuBarPanel(
+            model: panelModel,
+            onOpenDashboard: { [weak self] section in
+                self?.closePopover()
+                self?.showWindow(section: section)
+            },
+            onQuit: { NSApplication.shared.terminate(nil) })
+        popover.contentViewController = NSHostingController(rootView: panel)
+        popover.contentSize = NSSize(width: Theme.Layout.popoverWidth, height: 420)
+        self.popover = popover
     }
 
-    private func refreshMenu() {
-        Task { @MainActor in
-            let controller = AppController.shared
-            let menu = NSMenu()
-
-            let status = controller.isPaused ? "Paused" : "Collecting"
-            let statusRow = NSMenuItem(title: "Status: \(status)", action: nil, keyEquivalent: "")
-            statusRow.isEnabled = false
-            menu.addItem(statusRow)
-
-            if controller.lastTapStatus == .permissionDenied {
-                let warning = NSMenuItem(title: "Input Monitoring not granted — open Settings",
-                                         action: #selector(openInputMonitoring), keyEquivalent: "")
-                warning.target = self
-                menu.addItem(warning)
-            }
-            menu.addItem(.separator())
-
-            menu.addItem(item("Open ShortcutSense…", #selector(showWindow), "o"))
-            menu.addItem(item(controller.isPaused ? "Resume Collection" : "Pause Collection",
-                              #selector(togglePause), "p"))
-            menu.addItem(.separator())
-            menu.addItem(item("Quit ShortcutSense", #selector(quit), "q"))
-            statusItem?.menu = menu
+    @objc private func togglePopover(_ sender: Any?) {
+        guard let popover else { return }
+        if popover.isShown {
+            closePopover()
+        } else if let button = statusItem?.button {
+            panelModel.reload(force: true)
+            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+            popover.contentViewController?.view.window?.makeKey()
         }
     }
 
-    private func item(_ title: String, _ action: Selector, _ key: String) -> NSMenuItem {
-        let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
-        item.target = self
-        return item
+    private func closePopover() {
+        popover?.performClose(nil)
     }
 
-    @objc private func togglePause() {
-        Task { @MainActor in
-            AppController.shared.isPaused.toggle()
-            self.refreshMenu()
-        }
+    /// Reflects collection state on the icon itself so the user can tell at a glance.
+    private func refreshStatusItem() {
+        let status = TodayModel.status(for: AppController.shared)
+        statusItem?.button?.appletTerminalIsPaused(status == .paused)
+        statusItem?.button?.setAccessibilityLabel("\(L.t("app.name")) — \(status.label)")
+        statusItem?.button?.toolTip = "\(L.t("app.name")) — \(status.label)"
     }
 
-    @objc private func openInputMonitoring() {
-        let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent")!
-        NSWorkspace.shared.open(url)
-    }
+    // MARK: - Dashboard window
 
-    @objc private func quit() { NSApplication.shared.terminate(nil) }
-
-    @objc private func showWindow() {
+    func showWindow(section: RootView.Section = .today) {
+        pendingSection = section
         if let window {
             window.makeKeyAndOrderFront(nil)
             NSApplication.shared.activate(ignoringOtherApps: true)
             return
         }
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 860, height: 600),
+            contentRect: NSRect(origin: .zero, size: Theme.Layout.dashboardIdeal),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered, defer: false)
-        window.title = "ShortcutSense"
-        window.contentView = NSHostingViewFactory.makeRootView()
+        window.title = L.t("app.name")
+        window.minSize = Theme.Layout.dashboardMin
+        window.contentView = NSHostingView(rootView: RootView())
         window.center()
+        window.setFrameAutosaveName("ShortcutSenseDashboard")
         window.makeKeyAndOrderFront(nil)
         NSApplication.shared.activate(ignoringOtherApps: true)
         self.window = window
@@ -100,5 +105,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard UserDefaults.standard.bool(forKey: "hasCompletedFirstRun") == false else { return }
         UserDefaults.standard.set(true, forKey: "hasCompletedFirstRun")
         showWindow()
+    }
+}
+
+private extension NSStatusBarButton {
+    /// Tints the icon when collection is paused so the state is visible without
+    /// opening anything.
+    func appletTerminalIsPaused(_ paused: Bool) {
+        contentTintColor = paused ? .systemOrange : nil
     }
 }

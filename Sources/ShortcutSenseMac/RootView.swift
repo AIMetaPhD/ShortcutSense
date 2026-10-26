@@ -13,116 +13,100 @@ enum NSHostingViewFactory {
 @MainActor
 struct RootView: View {
     @State private var selection: Section = .today
+    @StateObject private var today = TodayModel()
+    @StateObject private var opportunities = OpportunitiesModel()
+    @State private var windowWidth: CGFloat = Theme.Layout.dashboardIdeal.width
 
     enum Section: String, CaseIterable, Identifiable {
-        case today = "Today"
-        case shortcuts = "Shortcuts"
-        case opportunities = "Opportunities"
-        case conflicts = "Conflict Check"
-        case weekly = "Weekly Review"
-        case settings = "Settings"
-
+        case today, shortcuts, opportunities, conflicts, weekly, settings
         var id: String { rawValue }
 
-        var localized: String {
+        var title: String {
             switch self {
-            case .today: return loc("Today", "今日")
-            case .shortcuts: return loc("Shortcuts", "快捷键")
-            case .opportunities: return loc("Opportunities", "推荐")
-            case .conflicts: return loc("Conflict Check", "冲突检查")
-            case .weekly: return loc("Weekly Review", "每周回顾")
-            case .settings: return loc("Settings", "设置")
+            case .today: return L.t("nav.today")
+            case .shortcuts: return L.t("nav.shortcuts")
+            case .opportunities: return L.t("nav.opportunities")
+            case .conflicts: return L.t("nav.conflicts")
+            case .weekly: return L.t("nav.weekly")
+            case .settings: return L.t("nav.settings")
+            }
+        }
+
+        var symbol: String {
+            switch self {
+            case .today: return "square.grid.2x2"
+            case .shortcuts: return "command"
+            case .opportunities: return "sparkles"
+            case .conflicts: return "exclamationmark.triangle"
+            case .weekly: return "calendar"
+            case .settings: return "gearshape"
             }
         }
     }
 
     var body: some View {
-        NavigationSplitView {
-            List(Section.allCases, selection: $selection) { section in
-                NavigationLink(value: section) { Text(section.localized) }
-            }
-            .navigationSplitViewColumnWidth(min: 170, ideal: 190)
-        } detail: {
-            Group {
-                switch selection {
-                case .today: TodayView()
-                case .shortcuts: ShortcutsView()
-                case .opportunities: OpportunitiesView()
-                case .conflicts: ConflictView()
-                case .weekly: WeeklyView()
-                case .settings: SettingsView()
-                }
-            }
-            .padding(20)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        HStack(spacing: 0) {
+            sidebar
+            Divider()
+            detail
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(minWidth: 780, minHeight: 520)
+        .frame(minWidth: Theme.Layout.dashboardMin.width,
+               minHeight: Theme.Layout.dashboardMin.height)
+        .background(.background)
     }
-}
 
-// MARK: - Today
-
-@MainActor
-struct TodayView: View {
-    @State private var activity: [DailyAppActivity] = []
-    @State private var paused = false
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                HStack {
-                    Text(loc("Today", "今日")).font(.largeTitle.bold())
-                    Spacer()
-                    Toggle(loc("Pause collection", "暂停采集"), isOn: Binding(
-                        get: { paused },
-                        set: { paused = $0; AppController.shared.isPaused = $0; reload() }))
-                        .toggleStyle(.switch)
-                }
-
-                Text(loc("ShortcutSense stores only daily totals per application. It never stores what you typed, window titles, URLs, clipboard contents or passwords.",
-                         "ShortcutSense 仅按应用保存每日汇总。不会保存你输入的内容、窗口标题、网址、剪贴板或密码。"))
-                    .font(.callout).foregroundStyle(.secondary)
-
-                Divider()
-
-                if activity.isEmpty {
-                    Text(loc("No data yet. Grant Input Monitoring to begin.",
-                             "暂无数据。授权“输入监控”后开始采集。"))
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(activity, id: \.bundleID) { row in
-                        HStack {
-                            VStack(alignment: .leading) {
-                                Text(row.bundleID).font(.headline)
-                                Text(loc("Anonymous keystrokes: \(row.totalAnonymousKeystrokes)",
-                                         "匿名按键总数：\(row.totalAnonymousKeystrokes)"))
-                                    .font(.caption).foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            VStack(alignment: .trailing) {
-                                Text(loc("Unknown origin: \(row.unknownOriginActivations)",
-                                         "来源未知：\(row.unknownOriginActivations)"))
-                                Text(loc("Keyboard navigation: \(row.observedKeyboardNavigation)",
-                                         "键盘导航：\(row.observedKeyboardNavigation)"))
-                                Text(loc("Managed hotkey: \(row.managedHotkeyActivations)",
-                                         "本应用热键：\(row.managedHotkeyActivations)"))
-                            }
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        }
-                        .padding(.vertical, 4)
+    private var sidebar: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            ForEach(Section.allCases) { section in
+                Button {
+                    selection = section
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: section.symbol)
+                            .font(.system(size: 12))
+                            .frame(width: 16)
+                        Text(section.title).font(.system(size: 13))
+                        Spacer()
                     }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .contentShape(Rectangle())
+                    .background(
+                        selection == section ? Theme.accentSoft : Color.clear,
+                        in: RoundedRectangle(cornerRadius: Theme.Radius.control))
+                    .foregroundStyle(selection == section ? Theme.accent : .primary)
                 }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(selection == section ? [.isSelected] : [])
             }
+            Spacer()
+            StatusPill(status: TodayModel.status(for: AppController.shared))
+                .padding(.horizontal, 10)
+                .padding(.bottom, 10)
         }
-        .onAppear(perform: reload)
+        .padding(.top, Theme.Spacing.medium)
+        .padding(.horizontal, 8)
+        .frame(width: Theme.Layout.sidebarWidth)
+        .background(.background.secondary)
     }
 
-    private func reload() {
-        let controller = AppController.shared
-        paused = controller.isPaused
-        let today = DateBuckets.bucket(for: Date(), timeZone: .current)
-        activity = (try? controller.store.dailyActivity(from: today, to: today)) ?? []
+    @ViewBuilder
+    private var detail: some View {
+        switch selection {
+        case .today:
+            TodayDashboard(model: today)
+        case .shortcuts:
+            ShortcutsView()
+        case .opportunities:
+            OpportunitiesDashboard(model: opportunities)
+        case .conflicts:
+            ConflictView()
+        case .weekly:
+            WeeklyView()
+        case .settings:
+            SettingsView()
+        }
     }
 }
 

@@ -11,6 +11,8 @@ import Foundation
 let suites: [(name: String, cases: [XCTestCase])] = [
     ("StoreTests", [StoreTests()]),
     ("StoreRuntimeSettingsTests", [StoreRuntimeSettingsTests()]),
+    ("TodayMetricsTests", [TodayMetricsTests()]),
+    ("HourlyAggregateTests", [HourlyAggregateTests()]),
     ("PrivacyGateTests", [PrivacyGateTests()]),
     ("CapturePrivacyTests", [CapturePrivacyTests()]),
     ("LiveStatePrivacyTests", [LiveStatePrivacyTests()]),
