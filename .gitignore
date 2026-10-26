@@ -1,0 +1,12 @@
+.build/
+.swiftpm/
+build/
+DerivedData/
+xcuserdata/
+.DS_Store
+*.sqlite*
+/release/
+.tooling/
+*.deb
+artifacts/
+Tools/TestRunner/Tests/
