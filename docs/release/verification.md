@@ -128,6 +128,40 @@ not prove macOS behaviour.
 **Not** notarized. **No** Developer ID. Gatekeeper behaviour of this ad-hoc bundle on
 a real user machine is NOT-RUN.
 
+## Live capture with the owner typing (2026-10-27)
+
+The first attempt produced zero combo rows. The cause was not a defect: the app had
+been killed by a reinstall and no process was running. After reinstalling and
+relaunching, with the owner pressing ⌘C / ⌘V / ⌘Tab:
+
+```json
+{ "events_seen": 19, "dropped": 0, "modifier_only": 0, "text_input": 13,
+  "command_shortcut": 6, "tap_status": "running",
+  "input_monitoring": "granted", "accessibility": "granted", "paused": false }
+```
+
+```sql
+SELECT bundle_id, combo_id, count FROM daily_combo_stats;
+org.mozilla.firefox                        kc9-m256   3
+org.mozilla.firefox                        kc8-m256   2
+org.mozilla.firefox                        kc48-m256  1
+io.github.clash-verge-rev.clash-verge-rev  kc8-m256   1
+io.github.clash-verge-rev.clash-verge-rev  kc9-m256   1
+io.github.clash-verge-rev.clash-verge-rev  kc48-m256  1
+```
+
+`kc8` = C, `kc9` = V, `kc48` = Tab, `m256` = Command: exactly the physical keys
+pressed, with no text and no per-key identity for anything else.
+
+Leak check on the live database: a canary string is absent from all three files, and
+every text column across `daily_app_activity`, `daily_combo_stats` and `excluded_apps`
+contains only bundle identifiers and normalized combo ids.
+
+An earlier scan reported 128 hits for words like `the` and `test`; that was a
+too-loose pattern matching SQLite's own page structure and a `com.test…` bundle id,
+not leaked text. Recorded here because a loose check that "finds" nothing is as
+misleading as one that finds everything.
+
 ## What has NOT been verified
 
 - Any GUI behaviour. The GitHub runners are headless VMs; nothing in this log shows

@@ -119,6 +119,34 @@ final class AppController {
         }
     }
 
+    /// Writes the in-memory capture counters to a file the user (or a QA session)
+    /// can read. Categories only — never key codes or text.
+    func writeRuntimeStats() {
+        let diagnostics = pipeline.diagnostics
+        let snapshot = Permissions.snapshot()
+        let payload: [String: Any] = [
+            "events_seen": diagnostics.eventsSeen,
+            "dropped": diagnostics.dropped,
+            "modifier_only": diagnostics.modifierOnly,
+            "text_input": diagnostics.textInput,
+            "command_shortcut": diagnostics.commandShortcut,
+            "last_drop_reason": diagnostics.lastDropReason ?? "none",
+            "last_modifier_raw": diagnostics.lastModifierRawValue,
+            "last_classification": diagnostics.lastClassification,
+            "tap_status": String(describing: eventTap.status),
+            "input_monitoring": snapshot.inputMonitoring.rawValue,
+            "accessibility": snapshot.accessibility.rawValue,
+            "paused": isPaused,
+            "written_at": DateBuckets.iso8601(Date()),
+        ]
+        let url = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("ShortcutSense/runtime-stats.json")
+        if let data = try? JSONSerialization.data(withJSONObject: payload,
+                                                  options: [.prettyPrinted, .sortedKeys]) {
+            try? data.write(to: url)
+        }
+    }
+
     private func recordFirstCollectionIfNeeded() {
         guard store.firstCollectionStartedAt() == nil,
               Permissions.inputMonitoringStatus() == .granted else { return }
@@ -133,6 +161,10 @@ final class AppController {
         // Expire stale attribution tokens so they cannot leak across activations.
         attributionTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in
             Task { @MainActor [weak self] in self?.pipeline.expireAttribution() }
+        }
+        // Refresh the readable counters every few seconds so QA can observe them.
+        Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { _ in
+            Task { @MainActor [weak self] in self?.writeRuntimeStats() }
         }
     }
 

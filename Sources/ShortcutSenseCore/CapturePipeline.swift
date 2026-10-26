@@ -51,6 +51,23 @@ public final class CapturePipeline {
     /// Most recent verified navigation combo, kept only in memory.
     public private(set) var lastNavigationComboID: String?
 
+    /// Diagnostic counters, in memory only, reported by `--diagnose`.
+    ///
+    /// They record *categories*, never key codes or text, so this cannot become a
+    /// keystroke log. They exist because a silent classification failure is
+    /// indistinguishable from "the user typed no shortcuts" without them.
+    public struct Diagnostics: Sendable {
+        public var eventsSeen = 0
+        public var dropped = 0
+        public var modifierOnly = 0
+        public var textInput = 0
+        public var commandShortcut = 0
+        public var lastDropReason: String?
+        public var lastModifierRawValue: UInt32 = 0
+        public var lastClassification = ""
+    }
+    public private(set) var diagnostics = Diagnostics()
+
     public init(store: Store, gate: PrivacyGate = PrivacyGate(),
                 context: CaptureContext = CaptureContext(),
                 now: @escaping () -> Date = Date.init,
@@ -75,19 +92,31 @@ public final class CapturePipeline {
     @discardableResult
     public func handle(_ event: RawKeyEvent) -> KeyEventClassification? {
         guard event.isKeyDown else { return nil }
+        diagnostics.eventsSeen += 1
+        diagnostics.lastModifierRawValue = event.modifiers.rawValue
         let decision = gate.decide(liveContext())
-        guard case .allow(let bundleID) = decision else { return nil }
+        guard case .allow(let bundleID) = decision else {
+            diagnostics.dropped += 1
+            if case .drop(let reason) = decision { diagnostics.lastDropReason = reason.rawValue }
+            return nil
+        }
 
         let classification = KeyCombo.classify(keyCode: event.keyCode, modifiers: event.modifiers)
         let date = DateBuckets.bucket(for: now(), timeZone: timeZone())
 
         switch classification {
         case .modifierOnly:
+            diagnostics.modifierOnly += 1
+            diagnostics.lastClassification = "modifierOnly"
             return classification
         case .textInput:
+            diagnostics.textInput += 1
+            diagnostics.lastClassification = "textInput"
             try? store.incrementAnonymousKeystrokes(date: date, bundleID: bundleID)
             return classification
         case .commandShortcut(let combo):
+            diagnostics.commandShortcut += 1
+            diagnostics.lastClassification = "commandShortcut"
             try? store.incrementCombo(date: date, bundleID: bundleID, comboID: combo.comboID)
             if NavigationShortcuts.isNavigation(combo) {
                 lastNavigationComboID = combo.comboID
