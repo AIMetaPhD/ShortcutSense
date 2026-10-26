@@ -1,0 +1,133 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Platform-independent core. Runs on Linux so a broken core is caught in seconds
+  # and never depends on a macOS runner being available.
+  core-linux:
+    name: Core (Linux, Swift 6.2)
+    runs-on: ubuntu-22.04
+    container: swift:6.2-jammy
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show toolchain
+        run: swift --version
+      # The swift image ships libsqlite3 but not its headers. Install them so the
+      # CSQLite system-library module can be built.
+      - name: Install SQLite headers
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq libsqlite3-dev
+          ls -l /usr/include/sqlite3.h
+      - name: Build core
+        run: swift build --target ShortcutSenseCore
+      - name: Test core
+        run: swift test 2>&1 | tee /tmp/test-output.txt
+      - name: Summarise test count
+        if: always()
+        run: |
+          {
+            echo '### Core test results'
+            echo '```'
+            grep -E "Executed [0-9]+ tests" /tmp/test-output.txt | tail -5 || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # Real macOS build + test on Apple Silicon. This is the authoritative compile check.
+  macos:
+    name: macOS ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, macos-15]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Record machine facts
+        run: |
+          echo "### ${{ matrix.os }}" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          uname -a
+          sw_vers
+          xcodebuild -version
+          swift --version
+          uname -m
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Check the shim runner lists every test class
+        run: ./Scripts/check-test-registry.sh
+
+      - name: Generate the XCTest-shim test sources
+        run: |
+          mkdir -p Tools/TestRunner/Tests
+          for f in Tests/ShortcutSenseCoreTests/*.swift; do
+            sed 's/^import XCTest/import Foundation/' "$f" > "Tools/TestRunner/Tests/$(basename "$f")"
+          done
+
+      - name: Build (all targets)
+        run: swift build 2>&1 | tee /tmp/macos-build.txt; test ${PIPESTATUS[0]} -eq 0
+
+      - name: Test (all targets)
+        run: swift test 2>&1 | tee /tmp/macos-tests.txt
+
+      - name: Test summary
+        if: always()
+        run: |
+          {
+            echo '### macOS test results'
+            echo '```'
+            grep -E "Executed [0-9]+ tests" /tmp/macos-tests.txt | tail -5 || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Assemble .app bundle
+        run: ./Scripts/build-app.sh
+
+      - name: Verify signature
+        run: |
+          APP="build/ShortcutSense.app"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          codesign -dv --verbose=4 "$APP" 2>&1 | tee /tmp/codesign.txt
+          { echo '### codesign'; echo '```'; cat /tmp/codesign.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Check bundle contents
+        run: |
+          test -f "build/ShortcutSense.app/Contents/MacOS/ShortcutSense"
+          test -f "build/ShortcutSense.app/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "build/ShortcutSense.app/Contents/Info.plist"
+          file "build/ShortcutSense.app/Contents/MacOS/ShortcutSense"
+
+      - name: Package DMG
+        run: ./Scripts/package-dmg.sh
+
+      - name: Record checksum
+        run: |
+          { echo '### DMG checksum'; echo '```'
+            cat release/*.sha256
+            echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload app bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: ShortcutSense-${{ matrix.os }}
+          path: build/ShortcutSense.app
+          if-no-files-found: error
+
+      - name: Upload DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: ShortcutSense-dmg-${{ matrix.os }}
+          path: |
+            release/*.dmg
+            release/*.sha256
+          if-no-files-found: error
