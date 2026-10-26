@@ -38,6 +38,12 @@ public struct AppKeystrokeTotal: Equatable, Sendable {
     public let keystrokes: Int
     /// Share of the day's total keystrokes, 0…1. Zero when the total is zero.
     public let share: Double
+
+    public init(bundleID: String, keystrokes: Int, share: Double) {
+        self.bundleID = bundleID
+        self.keystrokes = keystrokes
+        self.share = share
+    }
 }
 
 public struct ComboTotal: Equatable, Sendable {
@@ -46,18 +52,37 @@ public struct ComboTotal: Equatable, Sendable {
     public let count: Int
     /// Applications that produced this combo today, for the filter control.
     public let bundleIDs: [String]
+
+    public init(comboID: String, display: String, count: Int, bundleIDs: [String]) {
+        self.comboID = comboID
+        self.display = display
+        self.count = count
+        self.bundleIDs = bundleIDs
+    }
 }
 
 public struct DailyTotal: Equatable, Sendable {
     public let date: String
     public let keypresses: Int
     public let shortcuts: Int
+
+    public init(date: String, keypresses: Int, shortcuts: Int) {
+        self.date = date
+        self.keypresses = keypresses
+        self.shortcuts = shortcuts
+    }
 }
 
 public struct HourlyBucket: Equatable, Sendable {
     public let hour: Int
     public let keypresses: Int
     public let shortcuts: Int
+
+    public init(hour: Int, keypresses: Int, shortcuts: Int) {
+        self.hour = hour
+        self.keypresses = keypresses
+        self.shortcuts = shortcuts
+    }
 }
 
 public enum DashboardService {
