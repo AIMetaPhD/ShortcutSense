@@ -2,7 +2,7 @@ import CSQLite
 import Foundation
 
 public enum SchemaVersion {
-    public static let current = 1
+    public static let current = 2
 }
 
 /// All persisted state lives here. The schema follows `07_DATA_CONTRACT.md` §B.
@@ -39,6 +39,7 @@ public final class Store {
         if version >= Int64(SchemaVersion.current) { return }
         try db.transaction {
             if version < 1 { try createV1() }
+            if version < 2 { try createV2() }
             try db.execute("PRAGMA user_version=\(SchemaVersion.current)")
         }
     }
@@ -124,6 +125,82 @@ public final class Store {
         CREATE INDEX IF NOT EXISTS idx_usage_date ON applied_shortcut_usage_daily(date_bucket);
         CREATE INDEX IF NOT EXISTS idx_rec_status ON recommendations(status);
         """)
+    }
+
+    /// v2 adds the optional hourly aggregate the v2.1 UI contract describes.
+    ///
+    /// The table holds no key codes, app identities, characters, titles or per-event
+    /// timestamps — only an hour index and two counts. Collection into it is off by
+    /// default (`MetadataKey.hourlyCollectionEnabled`), and the UI must say so.
+    private func createV2() throws {
+        try db.execute("""
+        CREATE TABLE IF NOT EXISTS hourly_keyboard_activity (
+          local_date TEXT NOT NULL,
+          timezone_id TEXT NOT NULL,
+          hour_bucket INTEGER NOT NULL CHECK(hour_bucket BETWEEN 0 AND 23),
+          anonymous_keypress_count INTEGER NOT NULL DEFAULT 0 CHECK(anonymous_keypress_count >= 0),
+          safe_shortcut_count INTEGER NOT NULL DEFAULT 0 CHECK(safe_shortcut_count >= 0),
+          PRIMARY KEY (local_date, timezone_id, hour_bucket)
+        );
+        """)
+    }
+
+    // MARK: - Hourly aggregates
+
+    public var hourlyCollectionEnabled: Bool {
+        metadata(MetadataKey.hourlyCollectionEnabled) == "1"
+    }
+
+    public func setHourlyCollectionEnabled(_ enabled: Bool) throws {
+        try setMetadata(MetadataKey.hourlyCollectionEnabled, enabled ? "1" : "0")
+    }
+
+    /// Adds to one hour bucket. The caller has already passed the privacy gate.
+    public func incrementHourly(date: String, timeZoneIdentifier: String, hour: Int,
+                                keypresses: Int = 0, shortcuts: Int = 0) throws {
+        guard (0...23).contains(hour) else { return }
+        try queue.sync {
+            let stmt = try db.prepare("""
+            INSERT INTO hourly_keyboard_activity
+              (local_date,timezone_id,hour_bucket,anonymous_keypress_count,safe_shortcut_count)
+            VALUES(?,?,?,?,?)
+            ON CONFLICT(local_date,timezone_id,hour_bucket) DO UPDATE SET
+              anonymous_keypress_count=anonymous_keypress_count+excluded.anonymous_keypress_count,
+              safe_shortcut_count=safe_shortcut_count+excluded.safe_shortcut_count
+            """)
+            try stmt.bind([.text(date), .text(timeZoneIdentifier), .int(hour),
+                           .int(keypresses), .int(shortcuts)])
+            _ = try stmt.step()
+        }
+    }
+
+    public func hourlyActivity(date: String, timeZoneIdentifier: String) throws -> [HourlyBucket] {
+        try queue.sync {
+            let stmt = try db.prepare("""
+            SELECT hour_bucket, anonymous_keypress_count, safe_shortcut_count
+            FROM hourly_keyboard_activity
+            WHERE local_date=? AND timezone_id=? ORDER BY hour_bucket
+            """)
+            try stmt.bind([.text(date), .text(timeZoneIdentifier)])
+            var rows: [HourlyBucket] = []
+            while try stmt.step() {
+                rows.append(HourlyBucket(hour: Int(stmt.int(at: 0)),
+                                         keypresses: Int(stmt.int(at: 1)),
+                                         shortcuts: Int(stmt.int(at: 2))))
+            }
+            return rows
+        }
+    }
+
+    /// Removes hourly history older than `days`, leaving daily aggregates intact.
+    public func pruneHourly(olderThan days: Int, now: Date, timeZone: TimeZone) throws {
+        let cutoff = DateBuckets.bucket(
+            for: now.addingTimeInterval(-Double(days) * 86_400), timeZone: timeZone)
+        try queue.sync {
+            let stmt = try db.prepare("DELETE FROM hourly_keyboard_activity WHERE local_date < ?")
+            try stmt.bind([.text(cutoff)])
+            _ = try stmt.step()
+        }
     }
 
     // MARK: - Diagnostics
@@ -637,6 +714,7 @@ public final class Store {
                 DELETE FROM daily_combo_stats;
                 DELETE FROM daily_app_activity;
                 DELETE FROM weekly_reviews;
+                DELETE FROM hourly_keyboard_activity;
                 DELETE FROM excluded_apps;
                 DELETE FROM app_metadata;
                 """)
@@ -655,7 +733,8 @@ public final class Store {
             var counts: [String: Int] = [:]
             for table in ["app_metadata", "excluded_apps", "daily_combo_stats", "daily_app_activity",
                           "menu_action_stats", "recommendations", "registered_shortcuts",
-                          "applied_shortcut_usage_daily", "weekly_reviews"] {
+                          "applied_shortcut_usage_daily", "weekly_reviews",
+                          "hourly_keyboard_activity"] {
                 counts[table] = Int(try db.scalarInt("SELECT COUNT(*) FROM \(table)"))
             }
             return counts
@@ -692,6 +771,9 @@ public enum MetadataKey {
     public static let aiEndpoint = "ai_endpoint"
     public static let notificationsEnabled = "notifications_enabled"
     public static let weeklySchedule = "weekly_schedule"
+    /// Off by default: hourly distributions can reveal daily routines, so the user
+    /// must opt in explicitly (`12_UI_DATA_CONTRACT_DELTA.md`).
+    public static let hourlyCollectionEnabled = "hourly_collection_enabled"
 }
 
 public enum ExclusionSource: String, Sendable {
