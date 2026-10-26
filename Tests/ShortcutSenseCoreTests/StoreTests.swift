@@ -156,3 +156,42 @@ final class StoreTests: XCTestCase {
         XCTAssertTrue(json.contains("totalAnonymousKeystrokes"))
     }
 }
+
+/// Runtime settings that were wrong on the real Mac and must not regress.
+final class StoreRuntimeSettingsTests: XCTestCase {
+    private var temp: TempStore!
+
+    override func setUpWithError() throws { temp = try TempStore() }
+    override func tearDownWithError() throws { temp.tearDown(); temp = nil }
+
+    func testBusyTimeoutIsActuallyApplied() throws {
+        // Previously the call was present but the effective pragma was 0, so a
+        // concurrent writer would fail immediately instead of waiting.
+        let value = try temp.store.debugPragmaInt("busy_timeout")
+        XCTAssertGreaterThan(value, 0, "busy_timeout must be non-zero")
+    }
+
+    func testWALAutocheckpointIsBounded() throws {
+        // Default is 1000 pages; the real Mac let the WAL reach 1.2 MB against a
+        // 108 KB database because a long-lived connection never hit the threshold.
+        let value = try temp.store.debugPragmaInt("wal_autocheckpoint")
+        XCTAssertGreaterThan(value, 0)
+        XCTAssertLessThanOrEqual(value, 256)
+    }
+
+    func testJournalModeIsWAL() throws {
+        XCTAssertEqual(try temp.store.debugPragmaString("journal_mode"), "wal")
+    }
+
+    func testManySmallWritesKeepTheWALBounded() throws {
+        for index in 0..<400 {
+            try temp.store.incrementAnonymousKeystrokes(date: "2026-03-02",
+                                                        bundleID: "com.example.app\(index % 5)")
+        }
+        let attributes = try? FileManager.default.attributesOfItem(atPath: temp.walPath)
+        let walSize = (attributes?[.size] as? NSNumber)?.intValue ?? 0
+        // Generous bound: the point is that it does not grow without limit.
+        XCTAssertLessThan(walSize, 2 * 1024 * 1024,
+                          "WAL should be checkpointed, not accumulated (was \(walSize) bytes)")
+    }
+}

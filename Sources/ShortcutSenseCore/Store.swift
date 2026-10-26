@@ -22,6 +22,11 @@ public final class Store {
         try db.execute("PRAGMA journal_mode=WAL")
         try db.execute("PRAGMA synchronous=NORMAL")
         try db.execute("PRAGMA foreign_keys=ON")
+        // Measured on the real Mac: with the default 1000-page autocheckpoint the WAL
+        // grew to 1.2 MB against a 108 KB database, because this process holds a
+        // long-lived connection and the write rate is a handful of rows per minute.
+        // A smaller threshold keeps the WAL bounded without adding noticeable work.
+        try db.execute("PRAGMA wal_autocheckpoint=256")
         try migrate()
     }
 
@@ -119,6 +124,22 @@ public final class Store {
         CREATE INDEX IF NOT EXISTS idx_usage_date ON applied_shortcut_usage_daily(date_bucket);
         CREATE INDEX IF NOT EXISTS idx_rec_status ON recommendations(status);
         """)
+    }
+
+    // MARK: - Diagnostics
+
+    /// Test-only readers for connection pragmas, so a setting that silently failed
+    /// to apply is caught by a test rather than by a user noticing.
+    func debugPragmaInt(_ name: String) throws -> Int64 {
+        try queue.sync { try db.scalarInt("PRAGMA \(name)") }
+    }
+
+    func debugPragmaString(_ name: String) throws -> String {
+        try queue.sync {
+            let statement = try db.prepare("PRAGMA \(name)")
+            guard try statement.step() else { return "" }
+            return statement.string(at: 0) ?? ""
+        }
     }
 
     // MARK: - Metadata
