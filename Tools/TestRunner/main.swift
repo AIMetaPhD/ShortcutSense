@@ -10,6 +10,7 @@ import Foundation
 // from the real test sources; the suite list below names every class in those files.
 let suites: [(name: String, cases: [XCTestCase])] = [
     ("StoreTests", [StoreTests()]),
+    ("StoreRuntimeSettingsTests", [StoreRuntimeSettingsTests()]),
     ("PrivacyGateTests", [PrivacyGateTests()]),
     ("CapturePrivacyTests", [CapturePrivacyTests()]),
     ("LiveStatePrivacyTests", [LiveStatePrivacyTests()]),
