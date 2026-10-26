@@ -11,11 +11,22 @@ final class OpportunitiesModel: ObservableObject {
     @Published private(set) var cards: [RecommendationCardModel] = []
     @Published private(set) var registered: [RegisteredShortcut] = []
     @Published var actionError: String?
+    /// Non-nil when the store could not be read. Kept apart from actionError so a
+    /// read failure is never mistaken for a failed Apply.
+    @Published private(set) var readError: String?
     @Published var selected: RecommendationCardModel?
 
     func reload() {
-        cards = RecommendationCardModel.pending()
-        registered = (try? AppController.shared.store.registeredShortcuts(activeOnly: true)) ?? []
+        do {
+            cards = try RecommendationCardModel.pending()
+            registered = try AppController.shared.store.registeredShortcuts(activeOnly: true)
+            readError = nil
+        } catch {
+            // Empty cards mean "nothing to recommend"; an error means "could not tell".
+            cards = []
+            registered = []
+            readError = "\(error)"
+        }
     }
 
     func apply(_ card: RecommendationCardModel) {
@@ -35,7 +46,11 @@ final class OpportunitiesModel: ObservableObject {
             // Re-check immediately before registering: menus and other apps change.
             let fresh = ConflictResolver().evaluate(
                 combo, inputs: controller.conflictInputs(targetBundleID: card.bundleID))
-            _ = try controller.apply(recommendation: recommendation, combo: combo, conflict: fresh)
+            let record = try controller.apply(recommendation: recommendation, combo: combo,
+                                             conflict: fresh)
+            // Success here means the store now holds an active row, which is only
+            // written after the OS accepted the registration.
+            actionError = record.isActive ? nil : (L.isChinese ? "注册未被系统接受。" : "The registration was not accepted by the system.")
             reload()
         } catch {
             actionError = "\(error)"

@@ -22,15 +22,18 @@ struct RecommendationCardModel: Identifiable, Equatable {
     var hasObservedEvidence: Bool { observedCount != nil && activeDays != nil }
 
     /// Built from the live engine, not from stored fixtures.
+    ///
+    /// Throws when the store cannot be read: an empty list would be indistinguishable
+    /// from "nothing to recommend", which is a different and misleading message.
     @MainActor
-    static func pending() -> [RecommendationCardModel] {
+    static func pending() throws -> [RecommendationCardModel] {
         let controller = AppController.shared
         let store = controller.store
         let window = DateBuckets.rollingWindow(endingAt: Date(), days: 7,
                                                timeZone: store.collectionTimeZone)
 
-        let activity = (try? store.dailyActivity(from: window.buckets.first ?? "",
-                                                 to: window.buckets.last ?? "")) ?? []
+        let activity = try store.dailyActivity(from: window.buckets.first ?? "",
+                                               to: window.buckets.last ?? "")
         var byApp: [String: (unknown: Int, navigation: Int, days: Set<String>)] = [:]
         for row in activity {
             var entry = byApp[row.bundleID] ?? (0, 0, [])
@@ -47,8 +50,8 @@ struct RecommendationCardModel: Identifiable, Equatable {
                         managedHotkeyActivations: 0, activeDays: value.days.count)
         }
 
-        let registered = (try? store.registeredShortcuts(activeOnly: true)) ?? []
-        let all = (try? store.recommendations()) ?? []
+        let registered = try store.registeredShortcuts(activeOnly: true)
+        let all = try store.recommendations()
         let dismissed = Set(all.filter { rec in
             guard let until = rec.cooldownUntil, let when = DateBuckets.parseISO8601(until) else { return false }
             return when > Date()
@@ -77,15 +80,16 @@ struct RecommendationCardModel: Identifiable, Equatable {
                     conflict: candidate.conflict,
                     observedCount: candidate.evidence.unknownOriginActivations,
                     activeDays: candidate.evidence.activeDays,
-                    provenanceNote: .verifiedMenuClicks,
+                    // Origin is unknown activation, not a verified menu click.
+                    provenanceNote: .launchFocusInferred,
                     existingShortcut: nil)
             }
 
         // Learn cards exist only when the spike proved AX menu observation. Until
         // then the product must not pretend it observed menu clicks.
         if controller.menuObservationSupported {
-            let menuStats = (try? store.menuActionStats(from: window.buckets.first ?? "",
-                                                        to: window.buckets.last ?? "")) ?? []
+            let menuStats = try store.menuActionStats(from: window.buckets.first ?? "",
+                                                      to: window.buckets.last ?? "")
             let learns = engine.learnCandidates(
                 menuStats: menuStats,
                 existingManagedCombos: Set(registered.map(\.combo)),
@@ -112,7 +116,7 @@ struct RecommendationCardModel: Identifiable, Equatable {
     }
 
     @MainActor
-    static func topPending() -> RecommendationCardModel? { pending().first }
+    static func topPending() -> RecommendationCardModel? { (try? pending())?.first }
 }
 
 /// Compact form used on the Today screen.

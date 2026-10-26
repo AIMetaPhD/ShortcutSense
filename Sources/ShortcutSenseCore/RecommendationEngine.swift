@@ -187,6 +187,9 @@ public enum LearnKind: String, Sendable {
 public enum LearnProvenanceNote: String, Sendable {
     case verifiedMenuClicks = "verified_menu_clicks"
     case explicitManualMark = "explicit_manual_mark"
+    /// A launch/focus suggestion built from activation counts whose origin could not
+    /// be determined. Distinct from a verified menu click on purpose.
+    case launchFocusInferred = "launch_focus_inferred"
 }
 
 public struct ExplicitMenuMark: Equatable, Sendable {

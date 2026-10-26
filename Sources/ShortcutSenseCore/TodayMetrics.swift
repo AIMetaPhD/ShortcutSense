@@ -175,15 +175,26 @@ public enum DashboardService {
 
 // MARK: - Metric definitions shown next to each number
 
+/// Metric definitions shown next to each number.
+///
+/// Localized at the presentation layer: the core holds the keys, and the Mac target
+/// maps them through `L.t` so a Chinese locale never shows an English definition.
 public enum MetricDefinition {
     public static func windowLabel(for metrics: TodayMetrics) -> String {
         metrics.date
     }
 
-    public static let keypresses = "Anonymous keystroke count for the selected day. Excluded applications are not counted."
-    public static let shortcutUses = "Normalized Command/Control combinations recorded that day. Ordinary typing is never included."
-    public static let appsUsed = "Applications with at least one collected signal that day. Not every app you opened."
-    public static let managedTriggers = "Presses of hotkeys ShortcutSense registered, counted inside its own handler."
-    public static let topAppsMetric = "Ranked by keystrokes, not by time spent — this app does not measure time."
-    public static let heatmapMetric = "Only shortcut combinations are shown. Per-key character counts are unavailable by design."
+    public static let keypresses = "metric.keypresses"
+    public static let shortcutUses = "metric.shortcutUses"
+    public static let appsUsed = "metric.appsUsed"
+    public static let managedTriggers = "metric.managedTriggers"
+    public static let topAppsMetric = "metric.topApps"
+    public static let heatmapMetric = "metric.heatmap"
+
+    /// Resolves a metric key in the active locale. The core cannot localize on its
+    /// own, so the app supplies the strings.
+    public static func localized(_ key: String,
+                                 _ resolve: (String) -> String) -> String {
+        resolve(key)
+    }
 }

@@ -16,6 +16,8 @@ final class SettingsModel: ObservableObject {
     @Published var hourlyEnabled = false
     @Published var confirmDelete = false
     @Published var statusMessage: String?
+    /// Non-nil when the row counts could not be read.
+    @Published private(set) var dataError: String?
 
     func refresh() {
         let controller = AppController.shared
@@ -24,7 +26,15 @@ final class SettingsModel: ObservableObject {
         excluded = controller.store.excludedBundleIDs()
         isPaused = controller.isPaused
         firstCollectionAt = controller.store.firstCollectionStartedAt()
-        rowCounts = (try? controller.store.rowCounts()) ?? [:]
+        // A failed count must not render as "0 rows" — that reads as "your data is
+        // gone" rather than "the query failed".
+        do {
+            rowCounts = try controller.store.rowCounts()
+            dataError = nil
+        } catch {
+            rowCounts = [:]
+            dataError = "\(error)"
+        }
         aiEnabled = controller.isAIEnabled
         aiEndpoint = controller.aiEndpoint?.absoluteString ?? "http://127.0.0.1:11434/api/generate"
         hourlyEnabled = controller.store.hourlyCollectionEnabled
@@ -227,11 +237,18 @@ struct SettingsDashboard: View {
                               subtitle: L.isChinese
                                 ? "删除会清除全部历史、排除项和设置，释放系统热键，并检查点 SQLite WAL。你自己导出的文件不会被删除。"
                                 : "Deleting removes all history, exclusions and settings, releases OS hotkeys and checkpoints the SQLite WAL. Files you exported yourself are not touched.")
+                if let dataError = model.dataError {
+                    Label(L.isChinese ? "无法读取本地数据：\(dataError)"
+                                      : "Local data could not be read: \(dataError)",
+                          systemImage: "exclamationmark.triangle.fill")
+                        .font(Theme.Font.caption)
+                        .foregroundStyle(.red)
+                }
                 HStack(spacing: Theme.Spacing.medium) {
                     ForEach(["daily_combo_stats", "daily_app_activity", "registered_shortcuts",
                              "hourly_keyboard_activity"], id: \.self) { table in
                         VStack(alignment: .leading, spacing: 1) {
-                            Text("\(model.rowCounts[table] ?? 0)")
+                            Text(model.dataError == nil ? "\(model.rowCounts[table] ?? 0)" : "—")
                                 .font(.system(size: 15, weight: .medium, design: .rounded))
                                 .monospacedDigit()
                             Text(table.replacingOccurrences(of: "_", with: " "))

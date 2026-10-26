@@ -104,13 +104,15 @@ final class TodayMetricsTests: XCTestCase {
         XCTAssertEqual(try metrics(includeHourly: true).hourly?.first?.keypresses, 4)
     }
 
-    func testEveryMetricHasADescription() {
-        for text in [MetricDefinition.keypresses, MetricDefinition.shortcutUses,
-                     MetricDefinition.appsUsed, MetricDefinition.managedTriggers,
-                     MetricDefinition.topAppsMetric, MetricDefinition.heatmapMetric] {
-            XCTAssertFalse(text.isEmpty)
+    /// Metric definitions are keys, not English prose: the Mac layer localizes them
+    /// so a Chinese locale never shows an English sentence.
+    func testMetricDefinitionsAreLocalizationKeys() {
+        let keys = [MetricDefinition.keypresses, MetricDefinition.shortcutUses,
+                    MetricDefinition.appsUsed, MetricDefinition.managedTriggers,
+                    MetricDefinition.topAppsMetric, MetricDefinition.heatmapMetric]
+        for key in keys {
+            XCTAssertTrue(key.hasPrefix("metric."), "\(key) must be a localization key")
         }
-        XCTAssertTrue(MetricDefinition.topAppsMetric.contains("not by time"))
     }
 }
 
