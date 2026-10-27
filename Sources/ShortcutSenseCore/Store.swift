@@ -774,6 +774,10 @@ public enum MetadataKey {
     /// Off by default: hourly distributions can reveal daily routines, so the user
     /// must opt in explicitly (`12_UI_DATA_CONTRACT_DELTA.md`).
     public static let hourlyCollectionEnabled = "hourly_collection_enabled"
+    /// Name of the Ollama model the user picked. Empty means "first local model".
+    public static let aiModel = "ai_model"
+    /// "1" when the user allowed starting the installed Ollama app.
+    public static let aiAutoStartAllowed = "ai_auto_start_allowed"
 }
 
 public enum ExclusionSource: String, Sendable {

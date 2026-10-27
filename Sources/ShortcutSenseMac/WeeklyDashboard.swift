@@ -49,6 +49,8 @@ final class WeeklyModel: ObservableObject {
 
 struct WeeklyDashboard: View {
     @ObservedObject var model: WeeklyModel
+    @StateObject private var ai = AIAnalysisModel()
+    @State private var analysisTarget: RecommendationCardModel?
 
     var body: some View {
         ScrollView {
@@ -77,6 +79,7 @@ struct WeeklyDashboard: View {
                     Card { EmptyStateView(symbol: "calendar", title: L.t("common.empty")) }
                 }
 
+                aiCard
                 coverageCard
             }
             .padding(Theme.Spacing.large)
@@ -173,6 +176,30 @@ struct WeeklyDashboard: View {
                     .foregroundStyle(.tertiary)
             }
         }
+    }
+
+    /// Analysis entry for the current top recommendation. Only offered when there is
+    /// a real candidate; it never fabricates a sample to have something to analyse.
+    private var aiCard: some View {
+        Card {
+            VStack(alignment: .leading, spacing: Theme.Spacing.small) {
+                if let target = analysisTarget {
+                    AIExplanationPanel(model: ai, request: AIExplanationRequest(card: target))
+                } else {
+                    SectionHeader(
+                        title: L.isChinese ? "本地 AI 分析" : "Local AI analysis",
+                        subtitle: L.isChinese
+                            ? "当前没有可分析的候选。推荐需要至少 7 次激活、分布在 2 个不同日期；没有样本时不会生成分析。"
+                            : "There is no candidate to analyse. Recommendations need at least 7 activations across 2 different days; without a sample no analysis is produced.")
+                }
+            }
+        }
+        .onAppear { loadAnalysisTarget() }
+    }
+
+    private func loadAnalysisTarget() {
+        guard analysisTarget == nil else { return }
+        analysisTarget = (try? RecommendationCardModel.pending())?.first
     }
 
     private var coverageCard: some View {

@@ -61,6 +61,7 @@ final class SettingsModel: ObservableObject {
 
 struct SettingsDashboard: View {
     @ObservedObject var model: SettingsModel
+    @StateObject private var ai = AIAnalysisModel()
 
     var body: some View {
         ScrollView {
@@ -209,23 +210,95 @@ struct SettingsDashboard: View {
     private var aiSection: some View {
         Card {
             VStack(alignment: .leading, spacing: Theme.Spacing.small) {
-                SectionHeader(title: L.isChinese ? "可选本地 AI（Ollama）" : "Optional local AI (Ollama)",
+                SectionHeader(title: L.isChinese ? "本地 AI（Ollama）" : "Local AI (Ollama)",
                               subtitle: L.isChinese
-                                ? "默认关闭。启用后只向环回地址发送固定的聚合 JSON。模型只能返回解释，不能修改任何设置。"
-                                : "Off by default. When enabled, only a fixed aggregate JSON is sent to a loopback address. The model can only return an explanation; it cannot change any setting.")
+                                ? "默认关闭。开启后只与 127.0.0.1:11434 通信，只使用本机已安装的模型，只发送固定的聚合字段。模型只能返回解释，不能修改任何设置。"
+                                : "Off by default. When on, it only talks to 127.0.0.1:11434, only uses models installed on this Mac, and only sends fixed aggregate fields. The model can return an explanation and nothing else.")
+
                 Toggle(L.isChinese ? "启用本地 AI 解释" : "Enable local AI explanations",
-                       isOn: Binding(get: { model.aiEnabled },
-                                     set: { AppController.shared.isAIEnabled = $0; model.refresh() }))
-                TextField("Endpoint", text: $model.aiEndpoint)
-                    .textFieldStyle(.roundedBorder)
-                    .onSubmit { AppController.shared.aiEndpoint = URL(string: model.aiEndpoint) }
+                       isOn: Binding(get: { ai.isEnabled },
+                                     set: {
+                                         AppController.shared.isAIEnabled = $0
+                                         if $0 { ai.refreshDiscovery() } else { ai.stop() }
+                                         model.refresh()
+                                     }))
+
+                if ai.isEnabled {
+                    HStack(spacing: 6) {
+                        Image(systemName: ai.models.isEmpty ? "exclamationmark.circle" : "checkmark.circle.fill")
+                            .font(.system(size: 10))
+                            .foregroundStyle(ai.models.isEmpty ? .orange : .green)
+                        Text(ai.statusText)
+                            .font(Theme.Font.caption)
+                            .foregroundStyle(ai.models.isEmpty ? .orange : .secondary)
+                        if ai.checking { ProgressView().controlSize(.small) }
+                        Spacer()
+                        Button(L.isChinese ? "重新检测" : "Check again") { ai.refreshDiscovery() }
+                            .buttonStyle(.link)
+                            .font(Theme.Font.caption)
+                    }
+
+                    if !ai.models.isEmpty {
+                        Picker(L.isChinese ? "模型" : "Model",
+                               selection: Binding(get: { ai.selectedModel },
+                                                  set: {
+                                                      ai.selectedModel = $0
+                                                      AppController.shared.selectedModel = $0
+                                                  })) {
+                            ForEach(ai.models) { candidate in
+                                Text("\(candidate.name)  (\(ByteCountFormatter.string(fromByteCount: candidate.sizeBytes, countStyle: .file)))")
+                                    .tag(candidate.name)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .frame(maxWidth: 340, alignment: .leading)
+                    }
+
+                    if case .connectedCloudOnly(let rejected) = ai.status {
+                        ForEach(rejected, id: \.name) { cloud in
+                            Text("\(cloud.name): \(OllamaModelPolicy.rejectionReason(cloud.name) ?? "")")
+                                .font(Theme.Font.caption)
+                                .foregroundStyle(.orange)
+                        }
+                    }
+
+                    if case .installedNotRunning = ai.status {
+                        Toggle(L.isChinese
+                               ? "允许 ShortcutSense 启动已安装的 Ollama"
+                               : "Allow ShortcutSense to start the installed Ollama",
+                               isOn: Binding(
+                                get: { AppController.shared.allowAutoStartOllama },
+                                set: {
+                                    AppController.shared.allowAutoStartOllama = $0
+                                    if $0 { ai.startOllamaIfAllowed() }
+                                }))
+                        Text(L.isChinese
+                             ? "只启动你自己安装的 Ollama，不会下载任何模型；已经在运行的实例不会被关闭。"
+                             : "Only starts the Ollama you installed. It never downloads a model, and never stops an instance you started yourself.")
+                            .font(Theme.Font.caption)
+                            .foregroundStyle(.tertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    if case .notInstalled = ai.status {
+                        Text(L.isChinese
+                             ? "未检测到 Ollama。可从 ollama.com 安装后重新检测；本应用不会替你安装或下载任何东西。"
+                             : "Ollama was not found. Install it from ollama.com and check again; this app never installs or downloads anything for you.")
+                            .font(Theme.Font.caption)
+                            .foregroundStyle(.tertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+
                 Text(L.isChinese
-                     ? "仅接受 http://127.0.0.1 或 http://[::1]。"
-                     : "Only http://127.0.0.1 or http://[::1] is accepted.")
+                     ? "只使用名称不带云端标记的模型：Ollama 也能代理云端模型，仅检查环回地址不足以保证离线。"
+                     : "Only models without a cloud marker are offered: Ollama can proxy cloud models, so a loopback check alone cannot guarantee offline execution.")
                     .font(Theme.Font.caption)
                     .foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
+        .onAppear { if ai.isEnabled { ai.refreshDiscovery() } }
     }
 
     // MARK: Data
