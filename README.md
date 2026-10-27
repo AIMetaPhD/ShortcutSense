@@ -69,6 +69,14 @@ oversized output, executable-looking text, a timeout — falls back to a determi
 template. The model can never change a setting. With AI off, no product network
 request is made at all.
 
+**What this does not prove.** The app can verify three things: it only dials literal
+loopback (`127.0.0.1`, `::1`), it refuses HTTP redirects, and the model name carries
+no Ollama Cloud marker. It cannot verify that the Ollama server you are running is
+not itself proxying to a remote model — the client has no way to read that server's
+configuration. If your threat model requires proof of on-machine execution, run
+Ollama with `OLLAMA_NO_CLOUD=1` yourself; this app will not set it for you. Only
+aggregate fields are ever sent, never text you typed.
+
 ### Build
 
 Requirements: macOS 14+, Xcode 16 (Swift 6), Apple Silicon or Intel.
@@ -76,7 +84,7 @@ Requirements: macOS 14+, Xcode 16 (Swift 6), Apple Silicon or Intel.
 ```bash
 swift build
 swift test
-./Scripts/build-app.sh          # produces build/ShortcutSense.app, ad-hoc signed
+./Scripts/build-app.sh          # produces build/ShortcutSense.app, signed with your local identity
 open build/ShortcutSense.app
 ```
 
@@ -183,6 +191,12 @@ MIT. No third-party code is vendored; see
 发送固定的聚合 JSON。模型只能返回 `{reason, explanation, category}`；多余字段、
 超长输出、看起来可执行的文本、超时，一律回退到确定性模板。模型无法修改任何设置。
 AI 关闭时，产品不发出任何网络请求。
+
+**这不能证明什么。** 应用能验证三件事：只连字面量环回地址（`127.0.0.1`、`::1`）、
+拒绝 HTTP 重定向、模型名不带 Ollama 云端标记。它**无法**验证你运行的 Ollama 服务端
+是否在代理到远端模型——客户端读不到服务端的配置。如果你的威胁模型要求「证明在本机
+执行」，请自行以 `OLLAMA_NO_CLOUD=1` 启动 Ollama；本应用不会替你设置。发送的始终只有
+聚合字段，不包含你输入的文字。
 
 ### 构建
 
