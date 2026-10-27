@@ -14,6 +14,13 @@ if CommandLine.arguments.contains("--ai-probe") {
     exit(code)
 }
 
+// `--ax-spike` measures menu hit-testing through the AX API alone, without a human
+// clicking. Used to decide whether automatic Learn is viable.
+if CommandLine.arguments.contains("--ax-spike") {
+    NSApplication.shared.setActivationPolicy(.accessory)
+    exit(AXSpike.run())
+}
+
 // `--menu-spike [seconds]` measures real menu-click identification for the G-B gate.
 if let index = CommandLine.arguments.firstIndex(of: "--menu-spike") {
     let seconds = CommandLine.arguments.count > index + 1

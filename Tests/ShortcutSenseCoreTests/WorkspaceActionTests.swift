@@ -125,7 +125,8 @@ final class WorkspaceActionTests: XCTestCase {
         XCTAssertEqual(rows.first?.targetBundleIDs, ["com.apple.finder"])
     }
 
-    func testSchemaVersionIsThree() throws {
-        XCTAssertEqual(try temp.store.debugPragmaInt("user_version"), 3)
+    func testSchemaVersionIsCurrent() throws {
+        XCTAssertEqual(try temp.store.debugPragmaInt("user_version"),
+                       Int64(SchemaVersion.current))
     }
 }

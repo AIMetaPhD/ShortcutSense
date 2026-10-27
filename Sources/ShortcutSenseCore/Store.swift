@@ -2,7 +2,7 @@ import CSQLite
 import Foundation
 
 public enum SchemaVersion {
-    public static let current = 3
+    public static let current = 4
 }
 
 /// All persisted state lives here. The schema follows `07_DATA_CONTRACT.md` §B.
@@ -41,6 +41,7 @@ public final class Store {
             if version < 1 { try createV1() }
             if version < 2 { try createV2() }
             if version < 3 { try createV3() }
+            if version < 4 { try createV4() }
             try db.execute("PRAGMA user_version=\(SchemaVersion.current)")
         }
     }
@@ -155,6 +156,107 @@ public final class Store {
         }
         if !columns.contains("action_payload") {
             try db.execute("ALTER TABLE registered_shortcuts ADD COLUMN action_payload TEXT")
+        }
+    }
+
+    /// v4 adds the controlled T1 session sequence.
+    ///
+    /// A row records that, within one coarse time bucket, an application came to the
+    /// front and then a *static* menu command was used. It stores no window titles, no
+    /// URLs, no keystrokes and no sub-hour timing — only which app, which command, and
+    /// which bucket. `session_sequence` is the ordinal position within the session so
+    /// repeated patterns can be recognised without storing timestamps.
+    private func createV4() throws {
+        try db.execute("""
+        CREATE TABLE IF NOT EXISTS t1_sessions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          local_date TEXT NOT NULL,
+          timezone_id TEXT NOT NULL,
+          hour_bucket INTEGER NOT NULL CHECK(hour_bucket BETWEEN 0 AND 23),
+          session_sequence INTEGER NOT NULL CHECK(session_sequence >= 0),
+          event_kind TEXT NOT NULL CHECK(event_kind IN ('app_activation','verified_menu_command','manual_mark')),
+          bundle_id TEXT NOT NULL,
+          command_id TEXT,
+          safe_static_label TEXT,
+          known_shortcut TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_t1_date ON t1_sessions(local_date);
+        CREATE INDEX IF NOT EXISTS idx_t1_bundle ON t1_sessions(bundle_id);
+        """)
+    }
+
+    // MARK: - T1 controlled collection
+
+    /// Off by default. Enabling this is the only way menu-command observation runs.
+    public var t1CollectionEnabled: Bool {
+        metadata(MetadataKey.t1CollectionEnabled) == "1"
+    }
+
+    public func setT1CollectionEnabled(_ enabled: Bool) throws {
+        try setMetadata(MetadataKey.t1CollectionEnabled, enabled ? "1" : "0")
+    }
+
+    public func recordT1Event(date: String, timeZoneIdentifier: String, hour: Int,
+                              sequence: Int, kind: T1EventKind, bundleID: String,
+                              commandID: String? = nil, safeLabel: String? = nil,
+                              knownShortcut: String? = nil) throws {
+        guard (0...23).contains(hour) else { return }
+        try queue.sync {
+            let stmt = try db.prepare("""
+            INSERT INTO t1_sessions(local_date,timezone_id,hour_bucket,session_sequence,event_kind,bundle_id,command_id,safe_static_label,known_shortcut)
+            VALUES(?,?,?,?,?,?,?,?,?)
+            """)
+            try stmt.bind([
+                .text(date), .text(timeZoneIdentifier), .int(hour), .int(sequence),
+                .text(kind.rawValue), .text(bundleID),
+                commandID.map(SQLiteValue.text) ?? .null,
+                safeLabel.map(SQLiteValue.text) ?? .null,
+                knownShortcut.map(SQLiteValue.text) ?? .null,
+            ])
+            _ = try stmt.step()
+        }
+    }
+
+    public func t1Events(from start: String, to end: String) throws -> [T1Event] {
+        try queue.sync {
+            let stmt = try db.prepare("""
+            SELECT local_date,hour_bucket,session_sequence,event_kind,bundle_id,command_id,safe_static_label,known_shortcut
+            FROM t1_sessions WHERE local_date>=? AND local_date<=?
+            ORDER BY local_date, hour_bucket, session_sequence
+            """)
+            try stmt.bind([.text(start), .text(end)])
+            var rows: [T1Event] = []
+            while try stmt.step() {
+                rows.append(T1Event(
+                    date: stmt.string(at: 0) ?? "",
+                    hour: Int(stmt.int(at: 1)),
+                    sequence: Int(stmt.int(at: 2)),
+                    kind: T1EventKind(rawValue: stmt.string(at: 3) ?? "") ?? .appActivation,
+                    bundleID: stmt.string(at: 4) ?? "",
+                    commandID: stmt.string(at: 5),
+                    safeLabel: stmt.string(at: 6),
+                    knownShortcut: stmt.string(at: 7)))
+            }
+            return rows
+        }
+    }
+
+    /// Raw T1 rows are pruned after 14 days; aggregates derived from them live in the
+    /// daily tables and are not affected.
+    public func pruneT1(olderThan days: Int, now: Date, timeZone: TimeZone) throws {
+        let cutoff = DateBuckets.bucket(
+            for: now.addingTimeInterval(-Double(days) * 86_400), timeZone: timeZone)
+        try queue.sync {
+            let stmt = try db.prepare("DELETE FROM t1_sessions WHERE local_date < ?")
+            try stmt.bind([.text(cutoff)])
+            _ = try stmt.step()
+        }
+    }
+
+    public func clearT1() throws {
+        try queue.sync {
+            try db.execute("DELETE FROM t1_sessions")
+            try db.execute("DELETE FROM menu_action_stats WHERE provenance='verified_ax_click'")
         }
     }
 
@@ -743,6 +845,7 @@ public final class Store {
                 DELETE FROM daily_app_activity;
                 DELETE FROM weekly_reviews;
                 DELETE FROM hourly_keyboard_activity;
+                DELETE FROM t1_sessions;
                 DELETE FROM excluded_apps;
                 DELETE FROM app_metadata;
                 """)
@@ -762,7 +865,7 @@ public final class Store {
             for table in ["app_metadata", "excluded_apps", "daily_combo_stats", "daily_app_activity",
                           "menu_action_stats", "recommendations", "registered_shortcuts",
                           "applied_shortcut_usage_daily", "weekly_reviews",
-                          "hourly_keyboard_activity"] {
+                          "hourly_keyboard_activity", "t1_sessions"] {
                 counts[table] = Int(try db.scalarInt("SELECT COUNT(*) FROM \(table)"))
             }
             return counts
@@ -806,6 +909,8 @@ public enum MetadataKey {
     public static let aiModel = "ai_model"
     /// "1" when the user allowed starting the installed Ollama app.
     public static let aiAutoStartAllowed = "ai_auto_start_allowed"
+    /// T1 controlled collection. Off by default; the only gate for menu observation.
+    public static let t1CollectionEnabled = "t1_collection_enabled"
 }
 
 public enum ExclusionSource: String, Sendable {
@@ -829,6 +934,31 @@ public enum ActivityField: String, Sendable {
     case totalAnonymousKeystrokes = "total_anonymous_keystrokes"
 
     var column: String { rawValue }
+}
+
+/// One recorded T1 event. Ordered by sequence within an hour bucket.
+public enum T1EventKind: String, Codable, Sendable {
+    case appActivation = "app_activation"
+    case verifiedMenuCommand = "verified_menu_command"
+    case manualMark = "manual_mark"
+}
+
+public struct T1Event: Equatable, Sendable {
+    public let date: String
+    public let hour: Int
+    public let sequence: Int
+    public let kind: T1EventKind
+    public let bundleID: String
+    public let commandID: String?
+    public let safeLabel: String?
+    public let knownShortcut: String?
+
+    public init(date: String, hour: Int, sequence: Int, kind: T1EventKind,
+                bundleID: String, commandID: String?, safeLabel: String?, knownShortcut: String?) {
+        self.date = date; self.hour = hour; self.sequence = sequence; self.kind = kind
+        self.bundleID = bundleID; self.commandID = commandID
+        self.safeLabel = safeLabel; self.knownShortcut = knownShortcut
+    }
 }
 
 public enum MenuProvenance: String, Codable, Sendable {
