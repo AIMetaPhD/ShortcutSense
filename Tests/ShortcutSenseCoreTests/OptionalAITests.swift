@@ -48,7 +48,8 @@ final class OptionalAITests: XCTestCase {
 
     func testNonLoopbackEndpointIsRefused() {
         for host in ["http://192.168.1.10:11434", "https://127.0.0.1:11434",
-                     "http://example.com:11434", "http://0.0.0.0:11434"] {
+                     "http://example.com:11434", "http://0.0.0.0:11434",
+                     "http://localhost:11434"] {
             let transport = RecordingTransport(response: validResponse())
             let ai = OptionalAI(transport: transport)
             XCTAssertThrowsError(try ai.explain(request, enabled: true, endpoint: URL(string: host)!)) { error in
@@ -59,12 +60,24 @@ final class OptionalAITests: XCTestCase {
     }
 
     func testLoopbackEndpointsAreAccepted() throws {
-        for host in ["http://127.0.0.1:11434/api/generate", "http://localhost:11434/api/generate"] {
+        for host in ["http://127.0.0.1:11434/api/generate", "http://[::1]:11434/api/generate"] {
             let transport = RecordingTransport(response: validResponse())
             let ai = OptionalAI(transport: transport)
             _ = try ai.explain(request, enabled: true, endpoint: URL(string: host)!)
             XCTAssertEqual(transport.calls.count, 1)
         }
+    }
+
+    /// `localhost` is resolved through /etc/hosts, so accepting it would reintroduce a
+    /// name-resolution step the app cannot verify. Only literal loopback is allowed.
+    func testLocalhostHostnameIsRefused() {
+        let transport = RecordingTransport(response: validResponse())
+        let ai = OptionalAI(transport: transport)
+        XCTAssertThrowsError(try ai.explain(request, enabled: true,
+                                            endpoint: URL(string: "http://localhost:11434")!)) { error in
+            XCTAssertEqual(error as? AIError, .nonLoopbackEndpoint)
+        }
+        XCTAssertTrue(transport.calls.isEmpty)
     }
 
     // MARK: - Payload whitelist
@@ -184,12 +197,12 @@ final class EndpointNormalisationTests: XCTestCase {
     func testFullPathIsUnchanged() {
         let full = URL(string: "http://127.0.0.1:11434/api/generate")!
         XCTAssertEqual(OptionalAI.generateEndpoint(from: full), full)
-        let custom = URL(string: "http://localhost:8080/v1/chat")!
+        let custom = URL(string: "http://127.0.0.1:8080/v1/chat")!
         XCTAssertEqual(OptionalAI.generateEndpoint(from: custom), custom)
     }
 
     func testNormalisedEndpointStaysLoopback() {
-        for raw in ["http://127.0.0.1:11434", "http://localhost:11434", "http://[::1]:11434"] {
+        for raw in ["http://127.0.0.1:11434", "http://[::1]:11434"] {
             let normalised = OptionalAI.generateEndpoint(from: URL(string: raw)!)
             XCTAssertTrue(OptionalAI.isLoopback(normalised), "\(raw) must stay loopback after normalisation")
         }

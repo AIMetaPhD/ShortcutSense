@@ -83,6 +83,18 @@ exit=0
 
 ---
 
+## 3b. Muse 第四轮独立审阅（静态）
+
+10 项不变量全部 PASS，另指出三个需要修的问题，均已修：
+
+| 级别 | 问题 | 修法 |
+|---|---|---|
+| S2 | 在设置里关闭 AI 后，其他面板已在途的任务不会被取消；`apply()` 在自动启动 Ollama 前没有复核 AI 仍开启 | `apply()` 与 `analyze()` 在执行时重新检查 `isEnabled`；关闭后到达的发现结果直接丢弃 |
+| S3 | `--ai-probe` 的诊断分支用 `URLSession.shared` 直连，绕过了环回检查与拒绝重定向 | 该分支加上同样的 `isLoopback` 检查，并使用拒绝重定向的 session |
+| S4 | `OptionalAI` 注释称「主机名一律拒绝」但实际允许 `localhost`；`OllamaModelPolicy` 注释称「无法分类按非本地处理」但实际允许无标记名称 | 收紧实现：`localhost` 现在被拒绝（它经 `/etc/hosts` 解析）；模型策略注释改为如实描述「只拒已知云端标记」 |
+
+Muse 明确将 GUI 项标为 BLOCKED，未标 PASS。
+
 ## 4. 仍未验证的部分（交给 Muse）
 
 以下必须由人在 Mac 前操作，开发侧无法完成：

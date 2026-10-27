@@ -115,7 +115,7 @@ public struct OptionalAI: Sendable {
     public static func isLoopback(_ url: URL) -> Bool {
         guard url.scheme?.lowercased() == "http" else { return false }
         guard let host = url.host?.lowercased() else { return false }
-        return host == "127.0.0.1" || host == "::1" || host == "localhost"
+        return host == "127.0.0.1" || host == "::1"
     }
 
     /// Normalises a user-supplied endpoint into Ollama's generate path.

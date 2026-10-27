@@ -29,8 +29,10 @@ public struct OllamaModel: Equatable, Sendable, Identifiable {
 /// break the "fully offline" promise while every URL check still passed.
 ///
 /// This is a name-based check because it is the only locality signal Ollama exposes
-/// without inspecting server configuration. It is deliberately conservative: a name
-/// it cannot classify is treated as not local.
+/// without inspecting server configuration. It rejects names carrying a known cloud
+/// marker and treats every other name as local, which is a real limitation: a model
+/// served remotely under an ordinary name would not be detected. The settings screen
+/// states that limitation rather than implying the check is complete.
 public enum OllamaModelPolicy {
     /// Markers Ollama uses for models executed remotely.
     private static let cloudMarkers = ["-cloud", ":cloud", "cloud/"]

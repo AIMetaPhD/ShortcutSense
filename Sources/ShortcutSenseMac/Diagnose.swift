@@ -223,6 +223,9 @@ enum AIProbe {
     private static func rawShape(model: String) async -> [String] {
         var lines: [String] = []
         guard let url = URL(string: "http://127.0.0.1:11434/api/generate") else { return lines }
+        // Same two guards as the production path: never contact a non-loopback host
+        // and never follow a redirect, even from a diagnostic-only request.
+        guard OptionalAI.isLoopback(url) else { return lines }
         var request = URLRequest(url: url, timeoutInterval: 90)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -233,7 +236,10 @@ enum AIProbe {
             "options": ["temperature": 0.2, "num_predict": 200],
         ]
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        guard let (data, response) = try? await URLSession.shared.data(for: request),
+        let probeSession = URLSession(configuration: .ephemeral,
+                                      delegate: NoRedirectSessionDelegate(),
+                                      delegateQueue: nil)
+        guard let (data, response) = try? await probeSession.data(for: request),
               let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
             lines.append("raw_shape=request_failed")
             return lines

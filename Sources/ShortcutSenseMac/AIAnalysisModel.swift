@@ -78,6 +78,13 @@ final class AIAnalysisModel: ObservableObject {
     }
 
     private func apply(_ report: OllamaService.DiscoveryReport) {
+        // AI may have been switched off while discovery was in flight.
+        guard isEnabled else {
+            status = .disabled
+            models = []
+            selectedModel = ""
+            return
+        }
         status = report.status
         models = report.status.models.filter(\.isLocallyExecutable)
         discoveryLatency = report.latencyMilliseconds
@@ -90,7 +97,9 @@ final class AIAnalysisModel: ObservableObject {
         }
         // If the app is installed but not running and the user already allowed
         // auto-start, try once. Never loops, never starts a service unasked.
-        if case .installedNotRunning = status, AppController.shared.allowAutoStartOllama {
+        if case .installedNotRunning = status,
+           AppController.shared.allowAutoStartOllama,
+           isEnabled {
             startOllamaIfAllowed()
         }
     }
@@ -102,6 +111,12 @@ final class AIAnalysisModel: ObservableObject {
         analysisTask?.cancel()
         analysisTask = Task { [weak self] in
             guard let self else { return }
+            // Re-checked here, not only at the button: the user can switch AI off
+            // while the task is queued, and no request may be sent after that.
+            guard !Task.isCancelled, self.isEnabled else {
+                self.analyzing = false
+                return
+            }
             let result = await AppController.shared.ollama.explain(request, model: self.selectedModel)
             guard !Task.isCancelled else { return }
             self.outcome = result
