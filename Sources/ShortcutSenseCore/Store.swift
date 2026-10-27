@@ -2,7 +2,7 @@ import CSQLite
 import Foundation
 
 public enum SchemaVersion {
-    public static let current = 2
+    public static let current = 3
 }
 
 /// All persisted state lives here. The schema follows `07_DATA_CONTRACT.md` §B.
@@ -40,6 +40,7 @@ public final class Store {
         try db.transaction {
             if version < 1 { try createV1() }
             if version < 2 { try createV2() }
+            if version < 3 { try createV3() }
             try db.execute("PRAGMA user_version=\(SchemaVersion.current)")
         }
     }
@@ -143,6 +144,27 @@ public final class Store {
           PRIMARY KEY (local_date, timezone_id, hour_bucket)
         );
         """)
+    }
+
+    /// v3 lets one registration carry either a single-app action or a workspace of
+    /// two or three installed apps. Additive: existing rows default to `launch_app`.
+    private func createV3() throws {
+        let columns = try columnNames(of: "registered_shortcuts")
+        if !columns.contains("action_kind") {
+            try db.execute("ALTER TABLE registered_shortcuts ADD COLUMN action_kind TEXT NOT NULL DEFAULT 'launch_app'")
+        }
+        if !columns.contains("action_payload") {
+            try db.execute("ALTER TABLE registered_shortcuts ADD COLUMN action_payload TEXT")
+        }
+    }
+
+    private func columnNames(of table: String) throws -> Set<String> {
+        let stmt = try db.prepare("PRAGMA table_info(\(table))")
+        var names = Set<String>()
+        while try stmt.step() {
+            if let name = stmt.string(at: 1) { names.insert(name) }
+        }
+        return names
     }
 
     // MARK: - Hourly aggregates
@@ -521,8 +543,8 @@ public final class Store {
                 throw SQLiteError.execFailed("injected persistence failure")
             }
             let stmt = try db.prepare("""
-            INSERT INTO registered_shortcuts(id,recommendation_id,target_bundle_id,key_code,carbon_modifiers,display_combo,is_active,created_at,last_error_code)
-            VALUES(?,?,?,?,?,?,?,?,?)
+            INSERT INTO registered_shortcuts(id,recommendation_id,target_bundle_id,key_code,carbon_modifiers,display_combo,is_active,created_at,last_error_code,action_kind,action_payload)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?)
             """)
             try stmt.bind([
                 .text(shortcut.id), shortcut.recommendationID.map(SQLiteValue.text) ?? .null,
@@ -530,6 +552,8 @@ public final class Store {
                 .int(Int(shortcut.carbonModifiers)), .text(shortcut.displayCombo),
                 .bool(shortcut.isActive), .text(shortcut.createdAt),
                 shortcut.lastErrorCode.map { SQLiteValue.int(Int($0)) } ?? .null,
+                .text(shortcut.actionKind.rawValue),
+                shortcut.actionPayload.map(SQLiteValue.text) ?? .null,
             ])
             _ = try stmt.step()
         }
@@ -544,8 +568,8 @@ public final class Store {
         try queue.sync {
             try db.transaction {
                 let insert = try db.prepare("""
-                INSERT INTO registered_shortcuts(id,recommendation_id,target_bundle_id,key_code,carbon_modifiers,display_combo,is_active,created_at,last_error_code)
-                VALUES(?,?,?,?,?,?,?,?,?)
+                INSERT INTO registered_shortcuts(id,recommendation_id,target_bundle_id,key_code,carbon_modifiers,display_combo,is_active,created_at,last_error_code,action_kind,action_payload)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?)
                 """)
                 try insert.bind([
                     .text(shortcut.id), shortcut.recommendationID.map(SQLiteValue.text) ?? .null,
@@ -553,6 +577,8 @@ public final class Store {
                     .int(Int(shortcut.carbonModifiers)), .text(shortcut.displayCombo),
                     .bool(shortcut.isActive), .text(shortcut.createdAt),
                     shortcut.lastErrorCode.map { SQLiteValue.int(Int($0)) } ?? .null,
+                    .text(shortcut.actionKind.rawValue),
+                    shortcut.actionPayload.map(SQLiteValue.text) ?? .null,
                 ])
                 _ = try insert.step()
 
@@ -582,7 +608,7 @@ public final class Store {
     public func registeredShortcuts(activeOnly: Bool = false) throws -> [RegisteredShortcut] {
         try queue.sync {
             let stmt = try db.prepare("""
-            SELECT id,recommendation_id,target_bundle_id,key_code,carbon_modifiers,display_combo,is_active,created_at,last_error_code
+            SELECT id,recommendation_id,target_bundle_id,key_code,carbon_modifiers,display_combo,is_active,created_at,last_error_code,action_kind,action_payload
             FROM registered_shortcuts \(activeOnly ? "WHERE is_active=1" : "") ORDER BY created_at
             """)
             var rows: [RegisteredShortcut] = []
@@ -596,7 +622,9 @@ public final class Store {
                     displayCombo: stmt.string(at: 5) ?? "",
                     isActive: stmt.int(at: 6) == 1,
                     createdAt: stmt.string(at: 7) ?? "",
-                    lastErrorCode: stmt.optionalInt(at: 8).map { Int32(truncatingIfNeeded: $0) }
+                    lastErrorCode: stmt.optionalInt(at: 8).map { Int32(truncatingIfNeeded: $0) },
+                    actionKind: ShortcutActionKind(rawValue: stmt.string(at: 9) ?? "") ?? .launchApp,
+                    actionPayload: stmt.string(at: 10)
                 ))
             }
             return rows
@@ -895,6 +923,17 @@ public struct Recommendation: Codable, Equatable, Sendable {
     }
 }
 
+/// What a registered hotkey does.
+///
+/// Only these kinds exist: launching one application, or launching a workspace of two
+/// or three installed applications. There is deliberately no "run a script" or
+/// "open a URL" kind — the model and the recommendation engine can never produce an
+/// executable action beyond this whitelist.
+public enum ShortcutActionKind: String, Codable, Sendable {
+    case launchApp = "launch_app"
+    case launchWorkspace = "launch_workspace"
+}
+
 public struct RegisteredShortcut: Codable, Equatable, Sendable {
     public let id: String
     public let recommendationID: String?
@@ -905,6 +944,18 @@ public struct RegisteredShortcut: Codable, Equatable, Sendable {
     public var isActive: Bool
     public let createdAt: String
     public var lastErrorCode: Int32?
+    public var actionKind: ShortcutActionKind
+    /// For `launchWorkspace`: the bundle identifiers, comma separated.
+    public var actionPayload: String?
+
+    /// Bundle identifiers this action should launch or focus.
+    public var targetBundleIDs: [String] {
+        if actionKind == .launchWorkspace,
+           let payload = actionPayload, !payload.isEmpty {
+            return payload.split(separator: ",").map(String.init)
+        }
+        return [targetBundleID]
+    }
 
     public var combo: KeyCombo {
         KeyCombo(keyCode: keyCode, modifiers: ComboModifiers(rawValue: carbonModifiers))
@@ -912,11 +963,14 @@ public struct RegisteredShortcut: Codable, Equatable, Sendable {
 
     public init(id: String, recommendationID: String?, targetBundleID: String, keyCode: UInt16,
                 carbonModifiers: UInt32, displayCombo: String, isActive: Bool, createdAt: String,
-                lastErrorCode: Int32?) {
+                lastErrorCode: Int32?,
+                actionKind: ShortcutActionKind = .launchApp,
+                actionPayload: String? = nil) {
         self.id = id; self.recommendationID = recommendationID; self.targetBundleID = targetBundleID
         self.keyCode = keyCode; self.carbonModifiers = carbonModifiers
         self.displayCombo = displayCombo; self.isActive = isActive
         self.createdAt = createdAt; self.lastErrorCode = lastErrorCode
+        self.actionKind = actionKind; self.actionPayload = actionPayload
     }
 }
 
