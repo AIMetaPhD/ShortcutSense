@@ -54,7 +54,7 @@ final class AXMenuCodecTests: XCTestCase {
     // MARK: - Title safety
 
     func testStaticMenuTitlesAreSafe() {
-        for title in ["New Window", "Empty Trash", "Show All", "新建窗口", "Close Tab"] {
+        for title in ["New Window", "Show All", "新建窗口", "Close Tab", "Move to Trash"] {
             XCTAssertTrue(AXMenuCodec.isSafeStaticTitle(title), "\(title) should be safe")
         }
     }
@@ -72,7 +72,10 @@ final class AXMenuCodecTests: XCTestCase {
     }
 
     func testRecentItemsAreRejected() {
-        for title in ["Open Recent", "Recent Files", "Reopen", "打开最近的项目", "最近使用"] {
+        // "Open Recent" is a container whose children are user files; it is refused
+        // as a command and its children are refused by the allowlist.
+        for title in ["Open Recent", "Recent Files", "Reopen", "打开最近的项目", "最近使用",
+                      "thesis-final-v3.docx", "Untitled"] {
             XCTAssertFalse(AXMenuCodec.isSafeStaticTitle(title), "\(title) is a dynamic menu")
         }
     }

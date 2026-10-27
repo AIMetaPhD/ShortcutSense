@@ -102,6 +102,32 @@ enum MenuObserver {
         return element
     }
 
+    /// Walks up the AX parent chain to rebuild the menu path for an item, so an
+    /// observed click and a manual mark produce the same identifier.
+    static func menuPath(for element: AXUIElement) -> [String]? {
+        var titles: [String] = []
+        var current: AXUIElement? = element
+        var depth = 0
+        while let node = current, depth < 6 {
+            defer { depth += 1 }
+            var parentRef: CFTypeRef?
+            guard AXUIElementCopyAttributeValue(node, kAXParentAttribute as CFString,
+                                                &parentRef) == .success,
+                  let parentRef, CFGetTypeID(parentRef) == AXUIElementGetTypeID() else { break }
+            let parent = parentRef as! AXUIElement
+            if let role = stringAttribute(parent, kAXRoleAttribute),
+               role == kAXMenuBarItemRole as String || role == kAXMenuRole as String,
+               let title = stringAttribute(parent, kAXTitleAttribute),
+               AXMenuCodec.isSafeStaticTitle(title) {
+                titles.insert(title, at: 0)
+            }
+            current = parent
+        }
+        // The last element is the bar item itself, which is the menu name.
+        if titles.count > 1 { titles.removeLast() }
+        return titles
+    }
+
     static func describe(_ element: AXUIElement) -> (title: String?, shortcut: String?)? {
         guard let title = stringAttribute(element, kAXTitleAttribute) else { return nil }
         let char = stringAttribute(element, kAXMenuItemCmdCharAttribute)

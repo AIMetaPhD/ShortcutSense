@@ -16,6 +16,11 @@ if CommandLine.arguments.contains("--ai-probe") {
 
 // `--ax-spike` measures menu hit-testing through the AX API alone, without a human
 // clicking. Used to decide whether automatic Learn is viable.
+if CommandLine.arguments.contains("--ax-inventory") {
+    NSApplication.shared.setActivationPolicy(.accessory)
+    exit(AXSpike.inventory())
+}
+
 if CommandLine.arguments.contains("--ax-spike") {
     NSApplication.shared.setActivationPolicy(.accessory)
     exit(AXSpike.run())
