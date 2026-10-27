@@ -254,6 +254,44 @@ struct SettingsDashboard: View {
                         .frame(maxWidth: 340, alignment: .leading)
                     }
 
+                    if !ai.selectedModel.isEmpty {
+                        HStack(spacing: 8) {
+                            Button(L.isChinese ? "测试本地模型" : "Test local model") {
+                                ai.runSelfTest()
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                            .disabled(ai.analyzing)
+                            if ai.analyzing { ProgressView().controlSize(.small) }
+                            Spacer()
+                        }
+                        if let outcome = ai.outcome {
+                            HStack(spacing: 6) {
+                                Image(systemName: outcome.usedFallback
+                                      ? "doc.text" : "checkmark.seal.fill")
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(outcome.usedFallback ? .orange : .green)
+                                Text(outcome.usedFallback
+                                     ? (L.isChinese ? "内置模板（模型未参与）" : "Built-in template (model not used)")
+                                     : (L.isChinese ? "本地模型 \(outcome.model)" : "Local model \(outcome.model)"))
+                                    .font(Theme.Font.caption)
+                                    .foregroundStyle(outcome.usedFallback ? .orange : .green)
+                                Spacer()
+                                Text("\(outcome.latencyMilliseconds) ms")
+                                    .font(.system(size: 9, design: .monospaced))
+                                    .foregroundStyle(.tertiary)
+                            }
+                            if let reason = outcome.fallbackReason {
+                                Text(reason).font(Theme.Font.caption).foregroundStyle(.secondary)
+                            }
+                            Text(L.isChinese
+                                 ? "这是连通性测试，使用固定请求，不含你的任何数据。"
+                                 : "This is a connectivity test with a fixed request; it contains none of your data.")
+                                .font(Theme.Font.caption)
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+
                     if case .connectedCloudOnly(let rejected) = ai.status {
                         ForEach(rejected, id: \.name) { cloud in
                             Text("\(cloud.name): \(OllamaModelPolicy.rejectionReason(cloud.name) ?? "")")

@@ -124,6 +124,20 @@ final class AIAnalysisModel: ObservableObject {
         }
     }
 
+    /// A fixed request used only by the Settings self-test.
+    ///
+    /// It deliberately carries no user data: the point is to prove that discovery,
+    /// generation and schema validation work, not to produce an opinion. The result
+    /// is labelled as a test so it cannot be mistaken for a real recommendation.
+    static let selfTestRequest = AIExplanationRequest(
+        type: "connectivity_test", appName: "Connectivity test",
+        observedActivations7d: 0, originLabel: "unknown_origin", activeDays: 0,
+        proposedShortcut: "none", conflictStatus: "unknown", confidence: "unknown")
+
+    func runSelfTest() {
+        analyze(Self.selfTestRequest)
+    }
+
     func cancel() {
         analysisTask?.cancel()
         analysisTask = nil
