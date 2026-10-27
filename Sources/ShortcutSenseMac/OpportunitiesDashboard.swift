@@ -84,6 +84,7 @@ final class OpportunitiesModel: ObservableObject {
 
 struct OpportunitiesDashboard: View {
     @ObservedObject var model: OpportunitiesModel
+    @StateObject private var ai = AIAnalysisModel()
 
     var body: some View {
         ScrollView {
@@ -141,9 +142,11 @@ struct OpportunitiesDashboard: View {
         .onAppear { model.reload() }
         .sheet(item: $model.selected) { card in
             OpportunityDetail(card: card,
+                              ai: ai,
                               onApply: { model.apply(card); model.selected = nil },
                               onDismiss: { model.dismiss(card); model.selected = nil })
         }
+        .onDisappear { ai.stop() }
     }
 }
 
@@ -252,6 +255,7 @@ struct ConflictBadge: View {
 
 struct OpportunityDetail: View {
     let card: RecommendationCardModel
+    @ObservedObject var ai: AIAnalysisModel
     let onApply: () -> Void
     let onDismiss: () -> Void
     @Environment(\.dismiss) private var dismiss
@@ -308,6 +312,10 @@ struct OpportunityDetail: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
+            }
+
+            Card {
+                AIExplanationPanel(model: ai, request: AIExplanationRequest(card: card))
             }
 
             HStack {

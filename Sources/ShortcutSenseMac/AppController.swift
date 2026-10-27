@@ -21,7 +21,9 @@ final class AppController {
     private var activationObserver: NSObjectProtocol?
     private var permissionTimer: Timer?
     private var attributionTimer: Timer?
-    private lazy var aiService = OptionalAI(transport: OllamaTransport())
+    /// Talks to a local Ollama. Discovery and generation are async so a slow server
+    /// can never block the main thread or a SwiftUI body evaluation.
+    let ollama = OllamaService()
 
     private(set) var lastRestore: ShortcutActionManager.RestoreOutcome?
     private(set) var lastTapStatus: EventTapSource.TapStatus = .stopped
@@ -241,13 +243,27 @@ final class AppController {
         set { try? store.setMetadata(MetadataKey.aiEndpoint, newValue?.absoluteString ?? "") }
     }
 
-    /// Requests an explanation for a candidate. Returns the deterministic template
-    /// whenever AI is off, unreachable, slow, or returns anything unexpected.
-    func explain(_ request: AIExplanationRequest) -> AIExplanation {
-        let template = OptionalAI.template(for: request)
-        guard isAIEnabled, let endpoint = aiEndpoint else { return template }
-        let target = OllamaTransport.generateEndpoint(from: endpoint)
-        return (try? aiService.explain(request, enabled: true, endpoint: target)) ?? template
+    /// Model selected by the user, or nil to use the first locally-executable model.
+    var selectedModel: String? {
+        get { store.metadata(MetadataKey.aiModel) }
+        set { try? store.setMetadata(MetadataKey.aiModel, newValue ?? "") }
+    }
+
+    /// Whether the user allowed ShortcutSense to start the installed Ollama app.
+    /// Off by default: starting a background service on the user's behalf needs an
+    /// explicit decision, and a previously running instance is never touched.
+    var allowAutoStartOllama: Bool {
+        get { store.metadata(MetadataKey.aiAutoStartAllowed) == "1" }
+        set { try? store.setMetadata(MetadataKey.aiAutoStartAllowed, newValue ? "1" : "0") }
+    }
+
+    /// The model to use, preferring the stored choice when it is still installed and
+    /// executable locally.
+    func resolveModel(from models: [OllamaModel]) -> String? {
+        if let stored = selectedModel, models.contains(where: { $0.name == stored }) {
+            return stored
+        }
+        return models.first?.name
     }
 
     func setExcluded(bundleID: String, excluded: Bool) {

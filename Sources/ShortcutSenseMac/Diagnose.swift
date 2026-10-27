@@ -159,3 +159,117 @@ private struct AnyEncodable: Encodable {
     }
     func encode(to encoder: Encoder) throws { try encodeClosure(encoder) }
 }
+
+/// `ShortcutSense --ai-probe` performs one real discovery and one real generation
+/// against the local Ollama, then prints only non-sensitive metadata.
+///
+/// It exists so a QA session can prove the wiring without reading the prompt or the
+/// model's prose: what is printed is model names, HTTP outcomes, latency and whether
+/// the deterministic template was used.
+enum AIProbe {
+    static func run() async -> Int32 {
+        // Test-only override so failure paths (closed port, non-loopback) can be
+        // exercised without disturbing the user's running Ollama. Loopback is still
+        // enforced inside the service, so this cannot be used to reach another host.
+        let override = ProcessInfo.processInfo.environment["SHORTCUTSENSE_OLLAMA_URL"]
+            .flatMap(URL.init(string:))
+        let service = OllamaService(baseURL: override ?? OllamaService.defaultBaseURL)
+        let discovery = await service.discover()
+        var lines: [String] = []
+        lines.append("discovery_status=\(label(discovery.status))")
+        lines.append("discovery_latency_ms=\(discovery.latencyMilliseconds)")
+        switch discovery.status {
+        case .connected(let models), .connectedCloudOnly(let models):
+            lines.append("models=\(models.map(\.name).joined(separator: ","))")
+            lines.append("local_models=\(models.filter(\.isLocallyExecutable).map(\.name).joined(separator: ","))")
+            lines.append("cloud_models=\(models.filter { !$0.isLocallyExecutable }.map(\.name).joined(separator: ","))")
+        default:
+            lines.append("models=")
+            lines.append("local_models=")
+            lines.append("cloud_models=")
+        }
+
+        let local = discovery.status.models.filter(\.isLocallyExecutable)
+        guard let selected = local.first else {
+            lines.append("generation=skipped_no_local_model")
+            print(lines.joined(separator: "\n"))
+            return 3
+        }
+        let model = selected.name
+        lines.append("selected_model=\(model)")
+
+        let request = AIExplanationRequest(
+            type: "launch_focus", appName: "Probe", observedActivations7d: 9,
+            originLabel: "unknown_origin", activeDays: 3,
+            proposedShortcut: "Control+Option+Shift+C",
+            conflictStatus: "no_known_conflict", confidence: "heuristic")
+        let outcome = await service.explain(request, model: model)
+        lines.append("generation_latency_ms=\(outcome.latencyMilliseconds)")
+        lines.append("used_fallback=\(outcome.usedFallback)")
+        lines.append("fallback_reason=\(outcome.fallbackReason ?? "none")")
+        lines.append("category=\(outcome.explanation.category.rawValue)")
+        lines.append("explanation_characters=\(outcome.explanation.explanation.count)")
+        // When the model answered but the payload failed validation, print only the
+        // *shape* of the answer — key names and value types, never the prose — so a
+        // schema mismatch can be diagnosed without exposing generated text.
+        if outcome.usedFallback {
+            lines.append(contentsOf: await rawShape(model: model))
+        }
+        print(lines.joined(separator: "\n"))
+        return outcome.usedFallback ? 4 : 0
+    }
+
+    /// Returns the key names and value types of one raw generation. No values.
+    private static func rawShape(model: String) async -> [String] {
+        var lines: [String] = []
+        guard let url = URL(string: "http://127.0.0.1:11434/api/generate") else { return lines }
+        var request = URLRequest(url: url, timeoutInterval: 90)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let body: [String: Any] = [
+            "model": model,
+            "prompt": "Reply with JSON only: {\"reason\": string, \"explanation\": string, \"category\": one of efficiency|consistency|ergonomics|other}",
+            "stream": false, "format": "json",
+            "options": ["temperature": 0.2, "num_predict": 200],
+        ]
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            lines.append("raw_shape=request_failed")
+            return lines
+        }
+        guard let envelope = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            lines.append("raw_shape=envelope_unparseable")
+            return lines
+        }
+        // Counts only: how much budget went to hidden reasoning versus the answer.
+        lines.append("raw_response_chars=\((envelope["response"] as? String)?.count ?? -1)")
+        lines.append("raw_thinking_chars=\((envelope["thinking"] as? String)?.count ?? -1)")
+        guard let inner = envelope["response"] as? String,
+              let innerData = inner.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: innerData) as? [String: Any] else {
+            lines.append("raw_shape=inner_not_object")
+            lines.append("raw_envelope_keys=\(((try? JSONSerialization.jsonObject(with: data)) as? [String: Any])?.keys.sorted().joined(separator: ",") ?? "unparseable")")
+            return lines
+        }
+        lines.append("raw_inner_keys=\(object.keys.sorted().joined(separator: ","))")
+        for key in object.keys.sorted() {
+            lines.append("raw_type[\(key)]=\(type(of: object[key]!))")
+        }
+        if let category = object["category"] as? String {
+            lines.append("raw_category_lowercased=\(category.lowercased())")
+        }
+        return lines
+    }
+
+    private static func label(_ status: OllamaService.Status) -> String {
+        switch status {
+        case .disabled: return "disabled"
+        case .connected: return "connected"
+        case .connectedCloudOnly: return "connected_cloud_only"
+        case .installedNotRunning: return "installed_not_running"
+        case .notInstalled: return "not_installed"
+        case .failed(let message): return "failed:\(message)"
+        }
+    }
+}
