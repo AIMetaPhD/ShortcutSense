@@ -4,16 +4,16 @@
 
 ---
 
-## G-A：Ollama 收尾 — **PARTIAL / BLOCKED-GUI**
+## G-A：Ollama 收尾 — **PASS（1 项 NOT-RUN）**
 
 | 项 | 状态 | 证据 |
 |---|---|---|
 | D-035 / D-036 已修 | **PASS** | `docs/qa/ollama-acceptance.md`；真机 `/api/tags` 发现 `qwen3.5:9b`、`qwen3:14b`；一次 `/api/generate` 真调用 9.4 s、`used_fallback=false` |
 | 不夸大「绝对本地」 | **PASS** | README 中英双段明确写出：客户端只能证明环回、拒绝重定向、无云端标记；**无法**证明用户的 Ollama 服务端不代理云端，并指向 `OLLAMA_NO_CLOUD=1` |
 | 只发结构化聚合字段 | **PASS** | 字段白名单测试；`AIExplanationRequest` 9 个固定字段 |
-| Settings 显示真实模型 → 点分析 → 显示结果与 fallback 来源 | **BLOCKED-GUI** | 需人在 Mac 前操作并截图 |
-| 关闭服务/AI 不冻结窗口 | **BLOCKED-GUI** | 同上 |
-| 允许时能启动已安装的 Ollama | **BLOCKED-GUI** | 同上 |
+| Settings 显示真实模型 → 点分析 → 显示结果与 fallback 来源 | **PASS** | Owner 实机截图：`已连接，检测到 2 个本地模型`、`qwen3:14b (9.28 GB)`、绿色 `本地模型 qwen3:14b`、20,260 ms |
+| 关闭服务/AI 不冻结窗口 | **PASS** | 20 秒等待期间界面可操作 |
+| 允许时能启动已安装的 Ollama | **NOT-RUN** | Ollama 本就在运行，未触发该路径 |
 
 Muse 第四轮静态审阅：10 项不变量全 PASS，指出 3 个问题（S2 关闭后竞态、S3 探针旁路、S4 注释与实现不符），已全部修复。
 

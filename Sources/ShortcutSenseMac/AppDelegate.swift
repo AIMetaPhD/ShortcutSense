@@ -24,6 +24,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         }
     }
 
+    /// Clicking the app in Finder, Launchpad or the Dock while it is already running
+    /// sends a reopen event. Without this, macOS asks the app to "reopen" and nothing
+    /// happens — the window never appears, which reads as a broken app.
+    func applicationShouldHandleReopen(_ sender: NSApplication,
+                                       hasVisibleWindows flag: Bool) -> Bool {
+        if !flag { showWindow() }
+        NSApplication.shared.activate(ignoringOtherApps: true)
+        return true
+    }
+
+    /// A menu-bar app has no Dock icon, so there is nothing else to click when the
+    /// status item is hidden or off-screen. A plain launch therefore always shows the
+    /// dashboard; the welcome sheet still appears only once.
+    func applicationDidBecomeActive(_ notification: Notification) {
+        if window == nil { showWindow() }
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         Task { @MainActor in AppController.shared.stop() }
     }
@@ -32,9 +49,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     private func setUpStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        item.button?.image = NSImage(systemSymbolName: "command",
-                                     accessibilityDescription: L.t("app.name"))
-        item.button?.image?.isTemplate = true
+        let symbol = NSImage(systemSymbolName: "command",
+                             accessibilityDescription: L.t("app.name"))
+        if let symbol {
+            symbol.isTemplate = true
+            item.button?.image = symbol
+        } else {
+            // A nil image with variableLength length renders a zero-width, invisible
+            // button. Fall back to text so the item can always be found.
+            item.button?.title = "⌘"
+        }
         item.button?.target = self
         item.button?.action = #selector(togglePopover(_:))
         item.button?.setAccessibilityLabel(L.t("app.name"))
@@ -101,9 +125,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         self.window = window
     }
 
+    /// Always shows the dashboard on launch. The "welcome" content is a sheet inside
+    /// RootView gated by its own flag, so the window existing and the sheet appearing
+    /// are independent — previously one flag controlled both, and once set, the app
+    /// launched with no visible surface at all.
     private func showFirstRunIfNeeded() {
-        guard UserDefaults.standard.bool(forKey: "hasCompletedFirstRun") == false else { return }
-        UserDefaults.standard.set(true, forKey: "hasCompletedFirstRun")
         showWindow()
     }
 }
