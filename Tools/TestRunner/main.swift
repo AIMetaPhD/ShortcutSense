@@ -28,6 +28,7 @@ let suites: [(name: String, cases: [XCTestCase])] = [
     ("ShortcutActionManagerTests", [ShortcutActionManagerTests()]),
     ("KeyComboTests", [KeyComboTests()]),
     ("ApplyAtomicityTests", [ApplyAtomicityTests()]),
+    ("WorkspaceActionTests", [WorkspaceActionTests()]),
     ("WeeklyReviewTests", [WeeklyReviewTests()]),
     ("DateBucketsTests", [DateBucketsTests()]),
     ("OptionalAITests", [OptionalAITests()]),

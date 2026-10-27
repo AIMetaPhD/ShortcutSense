@@ -14,6 +14,14 @@ if CommandLine.arguments.contains("--ai-probe") {
     exit(code)
 }
 
+// `--menu-spike [seconds]` measures real menu-click identification for the G-B gate.
+if let index = CommandLine.arguments.firstIndex(of: "--menu-spike") {
+    let seconds = CommandLine.arguments.count > index + 1
+        ? Int(CommandLine.arguments[index + 1]) ?? 300 : 300
+    NSApplication.shared.setActivationPolicy(.accessory)
+    exit(MenuSpike.run(seconds: seconds))
+}
+
 // Menu-bar-only application: no Dock icon, no main window at launch.
 // `main.swift` runs on the main thread but outside the main actor's static
 // context, so the delegate is created inside `MainActor.assumeIsolated`.

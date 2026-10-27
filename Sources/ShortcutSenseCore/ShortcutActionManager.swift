@@ -1,5 +1,19 @@
 import Foundation
 
+public enum WorkspaceError: Error, Equatable, CustomStringConvertible {
+    case invalidSize(Int)
+    case notInstalled(String)
+
+    public var description: String {
+        switch self {
+        case .invalidSize(let count):
+            return "a workspace needs 2 or 3 installed applications, got \(count)"
+        case .notInstalled(let bundle):
+            return "\(bundle) is not installed"
+        }
+    }
+}
+
 public enum HotkeyRegistrationError: Error, Equatable, CustomStringConvertible {
     /// Carbon returned a non-zero `OSStatus`. -9878 is `eventHotKeyExistsErr`.
     case carbonError(Int32)
@@ -123,7 +137,8 @@ public final class ShortcutActionManager {
             targetBundleID: target, keyCode: combo.keyCode,
             carbonModifiers: combo.modifiers.rawValue,
             displayCombo: combo.displayString, isActive: true,
-            createdAt: DateBuckets.iso8601(now()), lastErrorCode: nil)
+            createdAt: DateBuckets.iso8601(now()), lastErrorCode: nil,
+            actionKind: .launchApp, actionPayload: target)
 
         do {
             // One transaction: a partially saved apply must not leave an active row.
@@ -203,8 +218,11 @@ public final class ShortcutActionManager {
                 failed.append((record.id, "target application not installed: \(record.targetBundleID)"))
                 continue
             }
+            // For a workspace the handler needs the whole list, not just the first
+            // entry: restoring with `targetBundleID` silently dropped the others.
+            let restoredTargets = record.targetBundleIDs.joined(separator: ",")
             let result = backend.register(record.combo, shortcutID: record.id, handler: { [weak self] in
-                self?.handleTrigger(shortcutID: record.id, targetBundleID: record.targetBundleID)
+                self?.handleTrigger(shortcutID: record.id, targetBundleID: restoredTargets)
             })
             switch result {
             case .success:
@@ -223,6 +241,56 @@ public final class ShortcutActionManager {
 
     // MARK: - Trigger handling
 
+    /// Registers a workspace: one hotkey that launches or focuses two or three
+    /// installed applications, in order.
+    ///
+    /// The action whitelist is enforced here, not in the UI: an empty list, a single
+    /// target, more than three, or any target that is not installed is refused. There
+    /// is no way to express a script or a URL.
+    @discardableResult
+    public func applyWorkspace(bundleIDs: [String], displayName: String,
+                               combo: KeyCombo, conflict: ConflictResult,
+                               recommendation: Recommendation?) throws -> RegisteredShortcut {
+        guard conflict.isEligibleForAutomaticApply else {
+            throw HotkeyRegistrationError.conflictNotClear(conflict.status)
+        }
+        guard (2...3).contains(bundleIDs.count) else {
+            throw WorkspaceError.invalidSize(bundleIDs.count)
+        }
+        for bundle in bundleIDs where !launcher.isInstalled(bundleID: bundle) {
+            throw WorkspaceError.notInstalled(bundle)
+        }
+        if let existing = try store.registeredShortcuts(activeOnly: true).first(where: { $0.combo == combo }) {
+            throw HotkeyRegistrationError.alreadyRegistered(existing.combo)
+        }
+
+        let shortcutID = UUID().uuidString
+        let payload = bundleIDs.joined(separator: ",")
+        switch backend.register(combo, shortcutID: shortcutID, handler: { [weak self] in
+            self?.handleTrigger(shortcutID: shortcutID, targetBundleID: payload)
+        }) {
+        case .failure(let error): throw error
+        case .success: break
+        }
+
+        let record = RegisteredShortcut(
+            id: shortcutID, recommendationID: recommendation?.id,
+            targetBundleID: bundleIDs.first ?? "",
+            keyCode: combo.keyCode, carbonModifiers: combo.modifiers.rawValue,
+            displayCombo: combo.displayString, isActive: true,
+            createdAt: DateBuckets.iso8601(now()), lastErrorCode: nil,
+            actionKind: .launchWorkspace, actionPayload: payload)
+        do {
+            try store.applyRegistration(record, recommendationID: recommendation?.id, now: now())
+        } catch {
+            _ = backend.unregister(shortcutID: shortcutID)
+            throw HotkeyRegistrationError.persistenceFailed(String(describing: error))
+        }
+        _ = displayName
+        onStateChange()
+        return record
+    }
+
     /// Called from the backend on a physical key press. Exactly one call per press.
     ///
     /// Only `trigger_count` is incremented here. `successful_target_activation_count`
@@ -233,11 +301,16 @@ public final class ShortcutActionManager {
     public func handleTrigger(shortcutID: String, targetBundleID: String) {
         let date = DateBuckets.bucket(for: now(), timeZone: timeZone())
         try? store.recordShortcutTrigger(shortcutID: shortcutID, date: date)
-        onTrigger?(shortcutID, targetBundleID)
-        do {
-            _ = try launcher.activateOrLaunch(bundleID: targetBundleID)
-        } catch {
-            // Activation failure is visible through the trigger/success mismatch.
+        // For a workspace the argument carries the comma-separated bundle list.
+        let targets = targetBundleID.split(separator: ",").map(String.init)
+        let primary = targets.first ?? targetBundleID
+        onTrigger?(shortcutID, primary)
+        for bundle in targets {
+            do {
+                _ = try launcher.activateOrLaunch(bundleID: bundle)
+            } catch {
+                // Activation failure is visible through the trigger/success mismatch.
+            }
         }
     }
 

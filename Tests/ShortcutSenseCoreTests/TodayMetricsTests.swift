@@ -201,7 +201,8 @@ final class HourlyAggregateTests: XCTestCase {
         }
     }
 
-    func testSchemaVersionIsTwo() throws {
-        XCTAssertEqual(try temp.store.debugPragmaInt("user_version"), 2)
+    func testSchemaVersionIsCurrent() throws {
+        XCTAssertEqual(try temp.store.debugPragmaInt("user_version"),
+                       Int64(SchemaVersion.current))
     }
 }
