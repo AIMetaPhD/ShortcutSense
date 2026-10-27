@@ -21,10 +21,11 @@ struct RootView: View {
     @StateObject private var conflicts = ConflictModel()
     @StateObject private var weekly = WeeklyModel()
     @StateObject private var settings = SettingsModel()
+    @StateObject private var patterns = PatternModel()
     @State private var showWelcome = false
 
     enum Section: String, CaseIterable, Identifiable {
-        case today, shortcuts, opportunities, conflicts, weekly, settings
+        case today, shortcuts, opportunities, learn, conflicts, weekly, settings
         var id: String { rawValue }
 
         var title: String {
@@ -32,6 +33,7 @@ struct RootView: View {
             case .today: return L.t("nav.today")
             case .shortcuts: return L.t("nav.shortcuts")
             case .opportunities: return L.t("nav.opportunities")
+            case .learn: return L.isChinese ? "学习与工作区" : "Learn & Workspaces"
             case .conflicts: return L.t("nav.conflicts")
             case .weekly: return L.t("nav.weekly")
             case .settings: return L.t("nav.settings")
@@ -43,6 +45,7 @@ struct RootView: View {
             case .today: return "square.grid.2x2"
             case .shortcuts: return "command"
             case .opportunities: return "sparkles"
+            case .learn: return "lightbulb"
             case .conflicts: return "exclamationmark.triangle"
             case .weekly: return "calendar"
             case .settings: return "gearshape"
@@ -55,9 +58,10 @@ struct RootView: View {
             case .today: return 1
             case .shortcuts: return 2
             case .opportunities: return 3
-            case .conflicts: return 4
-            case .weekly: return 5
-            case .settings: return 6
+            case .learn: return 4
+            case .conflicts: return 5
+            case .weekly: return 6
+            case .settings: return 7
             }
         }
 
@@ -68,7 +72,8 @@ struct RootView: View {
             case 3: return "3"
             case 4: return "4"
             case 5: return "5"
-            default: return "6"
+            case 6: return "6"
+            default: return "7"
             }
         }
     }
@@ -102,6 +107,7 @@ struct RootView: View {
             case .today: today.reload(force: true)
             case .shortcuts: shortcuts.reload()
             case .opportunities: opportunities.reload()
+            case .learn: patterns.reload()
             case .conflicts: conflicts.evaluate()
             case .weekly: weekly.reload()
             case .settings: settings.refresh()
@@ -166,6 +172,7 @@ struct RootView: View {
         case .today: TodayDashboard(model: today)
         case .shortcuts: ShortcutsDashboard(model: shortcuts)
         case .opportunities: OpportunitiesDashboard(model: opportunities)
+        case .learn: LearnDashboard(model: patterns)
         case .conflicts: ConflictDashboard(model: conflicts)
         case .weekly: WeeklyDashboard(model: weekly)
         case .settings: SettingsDashboard(model: settings)

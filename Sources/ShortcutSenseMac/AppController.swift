@@ -30,9 +30,15 @@ final class AppController {
     private(set) var menuObservationEnabled = false
     private var hasRequestedPermissions = false
 
-    /// Menu observation is only switched on when the spike proved it works.
-    /// Defaults to false so a build without spike evidence never claims to Learn.
-    var menuObservationSupported = false
+    /// The G-B spike measured 18/18 hits on Finder, Chrome and Safari (AX element at
+    /// the item's own coordinates, still identifiable immediately after a click), so
+    /// the AX path is viable. It is still gated behind the user's T1 opt-in: nothing
+    /// is observed until `t1CollectionEnabled` is true.
+    var menuObservationSupported = true
+
+    /// Sequence counter for the current hour bucket, reset when the hour changes.
+    private var t1Sequence = 0
+    private var t1HourKey = ""
 
     var onStateChange: (() -> Void)?
 
@@ -88,6 +94,7 @@ final class AppController {
 
         observeActivations()
         startTimers()
+        menuObservationEnabled = store.t1CollectionEnabled
         lastRestore = actionManager.restoreOnLaunch()
         recordFirstCollectionIfNeeded()
         onStateChange?()
@@ -206,6 +213,7 @@ final class AppController {
     }
 
     private func handleMouseUp(at point: CGPoint) {
+        guard store.t1CollectionEnabled else { return }
         guard menuObservationEnabled, menuObservationSupported else { return }
         guard let bundleID = AppLauncherMac.frontmostBundleID(),
               MenuAllowlist.isAllowed(bundleID) else { return }
@@ -213,10 +221,12 @@ final class AppController {
               let described = MenuObserver.describe(element),
               let title = described.title,
               MenuObserver.isSafeStaticTitle(title) else { return }
+        let commandID = MenuObserver.commandID(path: [], title: title)
         pipeline.handleVerifiedMenuClick(
-            bundleID: bundleID,
-            commandID: MenuObserver.commandID(path: [], title: title),
+            bundleID: bundleID, commandID: commandID,
             safeLabel: title, knownShortcut: described.shortcut)
+        recordT1(kind: .verifiedMenuCommand, bundleID: bundleID, commandID: commandID,
+                 safeLabel: title, knownShortcut: described.shortcut)
     }
 
     // MARK: - Settings surface
@@ -264,6 +274,47 @@ final class AppController {
             return stored
         }
         return models.first?.name
+    }
+
+    var t1CollectionEnabled: Bool {
+        get { store.t1CollectionEnabled }
+        set {
+            try? store.setT1CollectionEnabled(newValue)
+            menuObservationEnabled = newValue
+            onStateChange?()
+        }
+    }
+
+    /// Records one T1 event with a monotonic sequence inside the hour bucket.
+    private func recordT1(kind: T1EventKind, bundleID: String, commandID: String? = nil,
+                          safeLabel: String? = nil, knownShortcut: String? = nil) {
+        guard store.t1CollectionEnabled else { return }
+        let now = Date()
+        let zone = store.collectionTimeZone
+        let date = DateBuckets.bucket(for: now, timeZone: zone)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = zone
+        let hour = calendar.component(.hour, from: now)
+        let key = "\(date)-\(hour)"
+        if key != t1HourKey { t1HourKey = key; t1Sequence = 0 }
+        t1Sequence += 1
+        try? store.recordT1Event(date: date, timeZoneIdentifier: zone.identifier, hour: hour,
+                                 sequence: t1Sequence, kind: kind, bundleID: bundleID,
+                                 commandID: commandID, safeLabel: safeLabel,
+                                 knownShortcut: knownShortcut)
+    }
+
+    /// Records a menu command the user explicitly marked. Never claims a click count.
+    func recordManualMark(bundleID: String, commandID: String, safeLabel: String?,
+                          knownShortcut: String?) {
+        guard store.t1CollectionEnabled else { return }
+        let now = Date()
+        let date = DateBuckets.bucket(for: now, timeZone: store.collectionTimeZone)
+        try? store.incrementMenuAction(date: date, bundleID: bundleID, commandID: commandID,
+                                       safeLabel: safeLabel, knownShortcut: knownShortcut,
+                                       provenance: .explicitManualMark)
+        recordT1(kind: .manualMark, bundleID: bundleID, commandID: commandID,
+                 safeLabel: safeLabel, knownShortcut: knownShortcut)
     }
 
     func setExcluded(bundleID: String, excluded: Bool) {
