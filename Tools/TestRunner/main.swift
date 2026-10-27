@@ -32,6 +32,7 @@ let suites: [(name: String, cases: [XCTestCase])] = [
     ("MenuCommandPatternTests", [MenuCommandPatternTests()]),
     ("WorkspacePatternTests", [WorkspacePatternTests()]),
     ("T1StorageTests", [T1StorageTests()]),
+    ("TitleSafetyTests", [TitleSafetyTests()]),
     ("WeeklyReviewTests", [WeeklyReviewTests()]),
     ("DateBucketsTests", [DateBucketsTests()]),
     ("OptionalAITests", [OptionalAITests()]),

@@ -40,6 +40,52 @@ enum AXSpike {
         ["com.apple.finder", "com.google.Chrome", "com.apple.Safari"]
     }
 
+    /// Prints every static menu title of the allow-listed apps and whether the
+    /// allowlist would accept it. Read-only: nothing is stored, nothing is clicked.
+    static func inventory() -> Int32 {
+        guard Permissions.accessibilityStatus() == .granted else {
+            print("accessibility=denied")
+            return 2
+        }
+        var accepted: Set<String> = []
+        var rejected: Set<String> = []
+        for bundleID in candidateBundleIDs {
+            guard let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first
+                    ?? launch(bundleID: bundleID) else { continue }
+            let element = AXUIElementCreateApplication(app.processIdentifier)
+            guard let menuBar = self.element(element, kAXMenuBarAttribute),
+                  let topLevel = children(menuBar) else { continue }
+            for barItem in topLevel {
+                guard let menu = children(barItem)?.first, let items = children(menu) else { continue }
+                for item in items {
+                    guard let title = stringAttribute(item, kAXTitleAttribute),
+                          !title.isEmpty,
+                          stringAttribute(item, kAXRoleAttribute) == kAXMenuItemRole as String,
+                          stringAttribute(item, kAXMenuItemCmdCharAttribute) != nil else { continue }
+                    if AXMenuCodec.isSafeStaticTitle(title) { accepted.insert(title) }
+                    else { rejected.insert(title) }
+                }
+            }
+        }
+        var lines: [String] = []
+        lines.append("accepted=\(accepted.count) rejected=\(rejected.count)")
+        lines.append("--- accepted ---")
+        for title in accepted.sorted() { lines.append("  + \(title)") }
+        lines.append("--- rejected ---")
+        for title in rejected.sorted() { lines.append("  - \(title)") }
+        let text = lines.joined(separator: "\n")
+        // Launched through LaunchServices, so stdout is not attached to a terminal;
+        // write the inventory next to the other reports.
+        let base = FileManager.default.urls(for: .applicationSupportDirectory,
+                                           in: .userDomainMask)[0]
+            .appendingPathComponent("ShortcutSense", isDirectory: true)
+        try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        try? text.write(to: base.appendingPathComponent("ax-inventory.txt"),
+                        atomically: true, encoding: .utf8)
+        print(text)
+        return 0
+    }
+
     static func run() -> Int32 {
         guard Permissions.accessibilityStatus() == .granted else {
             print("accessibility=denied")
@@ -157,7 +203,7 @@ enum AXSpike {
 
                 tested += 1
                 menuTitleUsed = title
-                if labels.count < 6 { labels.append(itemTitle) }
+                if labels.count < 12 { labels.append(itemTitle) }
 
                 let point = CGPoint(x: frame.midX, y: frame.midY)
                 if let hit = MenuObserver.menuItemAt(point: point),
@@ -181,6 +227,9 @@ enum AXSpike {
         }
 
         guard tested > 0 else { return nil }
+        // A 0-hit result over 2–3 items is not evidence that the API is broken; it is
+        // evidence that the allowlist left almost nothing to test. The sample labels
+        // make that difference visible instead of inviting the wrong conclusion.
         return TargetResult(app: bundleID, menuTitle: menuTitleUsed, itemsTested: tested,
                             reachableHits: reachable, postClickHits: postClick,
                             sampleLabels: labels)

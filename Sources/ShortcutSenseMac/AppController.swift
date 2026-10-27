@@ -221,7 +221,11 @@ final class AppController {
               let described = MenuObserver.describe(element),
               let title = described.title,
               MenuObserver.isSafeStaticTitle(title) else { return }
-        let commandID = MenuObserver.commandID(path: [], title: title)
+        // The same identifier scheme as the manual-mark path: resolve the full menu
+        // path from the live menu bar so both write the same `command_id`. Using an
+        // empty path here split one command into two separate Learn counts.
+        let path = MenuObserver.menuPath(for: element) ?? []
+        let commandID = MenuObserver.commandID(path: path, title: title)
         pipeline.handleVerifiedMenuClick(
             bundleID: bundleID, commandID: commandID,
             safeLabel: title, knownShortcut: described.shortcut)
