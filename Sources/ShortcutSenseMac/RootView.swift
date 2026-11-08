@@ -8,13 +8,24 @@ enum NSHostingViewFactory {
     }
 }
 
+/// Selected dashboard section, shared with the app shell.
+///
+/// The window is created once and reused. Keeping the selection in `@State` inside
+/// `RootView` meant a later "open dashboard at Settings" request had nowhere to go:
+/// the view already existed, so the requested section was stored and never read.
+@MainActor
+final class DashboardNavigation: ObservableObject {
+    static let shared = DashboardNavigation()
+    @Published var section: RootView.Section = .today
+}
+
 /// The dashboard shell: sidebar navigation plus the selected screen.
 ///
 /// Every screen is bound to a view model that reads the real store; there is no
 /// sample-data path outside previews.
 @MainActor
 struct RootView: View {
-    @State private var selection: Section = .today
+    @ObservedObject private var navigation = DashboardNavigation.shared
     @StateObject private var today = TodayModel()
     @StateObject private var shortcuts = ShortcutsModel()
     @StateObject private var opportunities = OpportunitiesModel()
@@ -23,6 +34,12 @@ struct RootView: View {
     @StateObject private var settings = SettingsModel()
     @StateObject private var patterns = PatternModel()
     @State private var showWelcome = false
+
+    /// Read/write view onto the shared selection, so existing call sites stay simple.
+    private var selection: Section {
+        get { navigation.section }
+        nonmutating set { navigation.section = newValue }
+    }
 
     enum Section: String, CaseIterable, Identifiable {
         case today, shortcuts, opportunities, learn, conflicts, weekly, settings

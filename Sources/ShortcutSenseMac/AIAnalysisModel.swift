@@ -23,6 +23,13 @@ final class AIAnalysisModel: ObservableObject {
     private var discoveryTask: Task<Void, Never>?
     private var analysisTask: Task<Void, Never>?
 
+    /// One auto-start attempt per explicit user decision.
+    ///
+    /// Without this guard `apply` re-entered `startOllamaIfAllowed` every time the
+    /// re-check still reported "installed but not running", so a server that never
+    /// came up was relaunched roughly every six seconds, forever.
+    private var didAttemptAutoStart = false
+
     var isEnabled: Bool { AppController.shared.isAIEnabled }
     var canAnalyze: Bool { isEnabled && !selectedModel.isEmpty && !analyzing }
 
@@ -63,9 +70,13 @@ final class AIAnalysisModel: ObservableObject {
         }
     }
 
+    /// Allows one more automatic start attempt, after an explicit user action.
+    func resetAutoStartAttempt() { didAttemptAutoStart = false }
+
     /// Starts the installed Ollama app after the user allowed it, then re-checks.
     func startOllamaIfAllowed() {
         guard AppController.shared.allowAutoStartOllama else { return }
+        didAttemptAutoStart = true
         checking = true
         discoveryTask?.cancel()
         discoveryTask = Task { [weak self] in
@@ -96,10 +107,12 @@ final class AIAnalysisModel: ObservableObject {
             selectedModel = ""
         }
         // If the app is installed but not running and the user already allowed
-        // auto-start, try once. Never loops, never starts a service unasked.
+        // auto-start, try exactly once. The flag is what makes "try once" true: the
+        // re-check comes back through this same function.
         if case .installedNotRunning = status,
            AppController.shared.allowAutoStartOllama,
-           isEnabled {
+           isEnabled,
+           !didAttemptAutoStart {
             startOllamaIfAllowed()
         }
     }

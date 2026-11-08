@@ -96,10 +96,10 @@ final class EventTapSource {
         switch type {
         case .tapDisabledByTimeout:
             update(.disabledByTimeout)
-            if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
+            reenableAfterDisable()
         case .tapDisabledByUserInput:
             update(.disabledByUserInput)
-            if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
+            reenableAfterDisable()
         case .keyDown:
             // `event.flags` is CGEventFlags. It must be converted, not reinterpreted:
             // the CG and Carbon modifier bits share no bits at all.
@@ -129,9 +129,37 @@ final class EventTapSource {
             })
     }
 
+    /// Re-enables a tap the system disabled, and reports what actually happened.
+    ///
+    /// `CGEvent.tapEnable` returns `Void`, so the state has to be read back. Without
+    /// this the status stayed `.disabledByTimeout` while the tap was running again,
+    /// which made the UI report "blocked" on a machine that was collecting normally.
+    private func reenableAfterDisable() {
+        guard let tap else {
+            update(.stopped)
+            return
+        }
+        CGEvent.tapEnable(tap: tap, enable: true)
+        if CGEvent.tapIsEnabled(tap: tap) {
+            update(.running)
+        }
+    }
+
     private func rebuildAfterSystemEvent() {
-        if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
-        if tap == nil { createTap() }
+        if let tap {
+            CGEvent.tapEnable(tap: tap, enable: true)
+            if CGEvent.tapIsEnabled(tap: tap) {
+                update(.running)
+                return
+            }
+            // The port survived sleep but will not come back. Replace it rather than
+            // leaving the app reporting a dead tap that never recovers.
+            CFMachPortInvalidate(tap)
+            if let runLoopSource { CFRunLoopRemoveSource(CFRunLoopGetMain(), runLoopSource, .commonModes) }
+            self.tap = nil
+            self.runLoopSource = nil
+        }
+        createTap()
     }
 
     private func update(_ newStatus: TapStatus) {

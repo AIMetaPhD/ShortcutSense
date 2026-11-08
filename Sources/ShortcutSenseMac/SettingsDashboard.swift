@@ -219,7 +219,11 @@ struct SettingsDashboard: View {
                        isOn: Binding(get: { ai.isEnabled },
                                      set: {
                                          AppController.shared.isAIEnabled = $0
-                                         if $0 { ai.refreshDiscovery() } else { ai.stop() }
+                                         if $0 {
+                                             // A fresh user decision earns a fresh auto-start attempt.
+                                             ai.resetAutoStartAttempt()
+                                             ai.refreshDiscovery()
+                                         } else { ai.stop() }
                                          model.refresh()
                                      }))
 
@@ -308,7 +312,12 @@ struct SettingsDashboard: View {
                                 get: { AppController.shared.allowAutoStartOllama },
                                 set: {
                                     AppController.shared.allowAutoStartOllama = $0
-                                    if $0 { ai.startOllamaIfAllowed() }
+                                    if $0 {
+                                        // Turning the permission on is itself the user's
+                                        // decision, so it earns one attempt.
+                                        ai.resetAutoStartAttempt()
+                                        ai.startOllamaIfAllowed()
+                                    }
                                 }))
                         Text(L.isChinese
                              ? "只启动你自己安装的 Ollama，不会下载任何模型；已经在运行的实例不会被关闭。"

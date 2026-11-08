@@ -12,7 +12,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var popover: NSPopover?
     private var window: NSWindow?
     private let panelModel = TodayModel()
-    private var pendingSection: RootView.Section = .today
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         setUpStatusItem()
@@ -105,7 +104,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     // MARK: - Dashboard window
 
     func showWindow(section: RootView.Section = .today) {
-        pendingSection = section
+        // The window is reused; routing the section through the shared navigation
+        // object is what makes "open dashboard → Settings" work the second time.
+        DashboardNavigation.shared.section = section
         if let window {
             window.makeKeyAndOrderFront(nil)
             NSApplication.shared.activate(ignoringOtherApps: true)

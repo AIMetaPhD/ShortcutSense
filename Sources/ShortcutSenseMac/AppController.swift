@@ -40,6 +40,12 @@ final class AppController {
     private var t1Sequence = 0
     private var t1HourKey = ""
 
+    /// Retention promised by the UI: raw T1 rows live 14 days, hourly buckets 30.
+    /// Pruning is checked once per day rather than on every event.
+    private static let t1RetentionDays = 14
+    private static let hourlyRetentionDays = 30
+    private var lastPruneDay: String?
+
     var onStateChange: (() -> Void)?
 
     private init() {
@@ -96,6 +102,7 @@ final class AppController {
         startTimers()
         menuObservationEnabled = store.t1CollectionEnabled
         lastRestore = actionManager.restoreOnLaunch()
+        pruneRetainedDataIfNeeded()
         recordFirstCollectionIfNeeded()
         onStateChange?()
     }
@@ -156,6 +163,20 @@ final class AppController {
         }
     }
 
+    /// Enforces the retention the UI states. Runs at most once per local day.
+    ///
+    /// `pruneT1` and `pruneHourly` existed but nothing called them, so raw T1 rows
+    /// accumulated forever while the Learn screen promised 14-day pruning.
+    private func pruneRetainedDataIfNeeded() {
+        let now = Date()
+        let zone = store.collectionTimeZone
+        let today = DateBuckets.bucket(for: now, timeZone: zone)
+        guard today != lastPruneDay else { return }
+        lastPruneDay = today
+        try? store.pruneT1(olderThan: Self.t1RetentionDays, now: now, timeZone: zone)
+        try? store.pruneHourly(olderThan: Self.hourlyRetentionDays, now: now, timeZone: zone)
+    }
+
     private func recordFirstCollectionIfNeeded() {
         guard store.firstCollectionStartedAt() == nil,
               Permissions.inputMonitoringStatus() == .granted else { return }
@@ -178,6 +199,8 @@ final class AppController {
     }
 
     private func refreshContext() {
+        // Cheap once-a-day guard; the prune itself is a single indexed DELETE.
+        pruneRetainedDataIfNeeded()
         let snapshot = Permissions.snapshot()
         pipeline.updateContext { context in
             context.hasInputMonitoringPermission = snapshot.inputMonitoring == .granted
