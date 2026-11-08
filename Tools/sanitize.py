@@ -27,6 +27,12 @@ SUBS = [
     (_s('{{USERNAME_', 'gajs5wuf}}'), 'the-owner'),
     (_s('{{USERNAME_', '2enyv35g}}'), 'the-owner'),
     (_s('{{USERNAME_', '5tg55gdw}}'), 'the-owner'),
+    # The account that hosted the retired staging repository. Matched by the shape of
+    # the URL rather than by the literal name, so this file never contains it.
+    (r'github\.com/[A-Za-z0-9_.-]+/ShortcutSense-staging',
+     'github.com/<account>/ShortcutSense-staging'),
+    (r'`[A-Za-z0-9_.-]+/ShortcutSense-staging`',
+     '`<account>/ShortcutSense-staging`'),
     # Machine hostnames and Tailscale addresses.
     (_s('{{HOSTNAME_', '7nxeug5z}}'), '<mac-hostname>'),
     (_s('{{HOSTNAME_', 'ysmkbpsb}}'), '<mac-hostname>'),
@@ -51,10 +57,12 @@ def main() -> int:
 
     for dirpath, dirnames, filenames in os.walk(root):
         rel_dir = os.path.relpath(dirpath, root)
+        # Compare whole relative paths, not bare names: "release" must skip the
+        # build output at the repository root but never "docs/release".
         dirnames[:] = [
             d for d in dirnames
-            if d not in SKIP_DIRS
-            and os.path.join(rel_dir, d).replace(os.sep, '/') not in SKIP_DIRS
+            if os.path.normpath(os.path.join(rel_dir, d)).replace(os.sep, '/')
+            not in SKIP_DIRS
         ]
         for name in filenames:
             path = os.path.join(dirpath, name)

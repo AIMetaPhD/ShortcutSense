@@ -1,5 +1,8 @@
 # 夜间工作报告（2026-10-27）
 
+> **已过时。** 这是分阶段开发期的历史快照。当前状态见
+> [`acceptance-status.md`](acceptance-status.md) 与 [`G-A-B-C-status.md`](G-A-B-C-status.md)。
+
 你休息期间完成的工作。**没有做任何公开操作**：仓库仍是私有，没有创建公开仓库、
 没有 Release、没有改你的 GitHub 主页。
 

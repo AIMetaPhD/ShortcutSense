@@ -16,7 +16,7 @@ marked PASS on the strength of a different kind of evidence.
 
 ## CI runs (staging repository)
 
-Repository: `XiangchunChen/ShortcutSense-staging` (private; publishing is a separate,
+Repository: `<account>/ShortcutSense-staging` (private; publishing is a separate,
 owner-approved step).
 
 | Run | Commit | Result | Jobs |

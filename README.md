@@ -10,10 +10,12 @@ A privacy-first macOS menu-bar app that notices repeated app switching, suggests
 global hotkey, checks for known conflicts, and tracks whether the shortcut actually
 gets used.
 
-**Status: pre-release.** The core logic is implemented and tested (130 tests, green
-on Linux and on arm64 macOS 14/15 runners). macOS runtime behaviour — permissions,
-Accessibility menus, physical hotkey delivery, Gatekeeper install — has **not** been
-verified on a real desktop yet, and is not claimed. See
+**Status: v0.1.0 — first usable build (private archive).** 250 tests pass on Linux
+and on the target MacBook Air (macOS 26.6.2, arm64). Verified on that Mac: both TCC
+grants, live capture with no typed text reaching disk, Carbon registration, menu
+reading, and a real local-Ollama explanation. **Not verified:** a human mouse click on
+menu items (only synthetic clicks were measured), a Gatekeeper "Open Anyway" install
+from a fresh copy, and seven consecutive days of real data. See
 [`docs/release/acceptance-status.md`](docs/release/acceptance-status.md).
 
 ### What it does
@@ -145,9 +147,10 @@ MIT. No third-party code is vendored; see
 隐私优先的 macOS 菜单栏应用：发现你反复切换的应用，建议一个全局热键，检查已知
 冲突，并追踪这个热键是否真的被用起来。
 
-**状态：预发布。** 核心逻辑已实现并有 130 项测试（在 Linux 与 arm64 的 macOS 14/15
-上通过）。但 macOS 的运行时行为——权限、辅助功能菜单、真实按键投递、Gatekeeper
-安装——**尚未**在真实桌面上验证，也没有声称已验证。详见
+**状态：v0.1.0 —— 首个可用版本（私有存档）。** 250 项测试在 Linux 与目标 MacBook Air
+（macOS 26.6.2，arm64）上通过。已在该机验证：两项 TCC 授权、实时采集且输入文字不落盘、
+Carbon 注册、菜单读取、本地 Ollama 真实解释。**未验证**：真人鼠标点击菜单项（只测过
+合成点击）、Gatekeeper「仍要打开」的全新副本安装、连续 7 天真实数据。详见
 [`docs/release/acceptance-status.md`](docs/release/acceptance-status.md)。
 
 ### 它做什么

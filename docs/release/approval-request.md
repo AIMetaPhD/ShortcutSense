@@ -1,5 +1,10 @@
 # Release Approval Request — ShortcutSense v0.1.0
 
+> **Superseded.** Written before the real-Mac sessions. Items listed below as "NOT
+> proven" have since been executed and are recorded in
+> [`acceptance-status.md`](acceptance-status.md). This file is kept only as a record of
+> what was unknown at that date.
+
 **Date:** 2026-10-26
 **Status: NOT READY FOR G6. This is a request for two decisions, not for publication.**
 
@@ -22,7 +27,7 @@ merely written, and asks for the two things only the owner can provide.
 | Checksum re-verified off-machine | matches |
 | CI run | [40333209146](https://github.com/<account>/ShortcutSense-staging/actions/runs/40333209146) — success |
 
-Staging repository (private): `XiangchunChen/ShortcutSense-staging`.
+Staging repository (private): `<account>/ShortcutSense-staging`.
 
 ## 2. What is NOT proven, and why
 

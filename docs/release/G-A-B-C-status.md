@@ -1,6 +1,8 @@
-# G-A / G-B / G-C 状态（2026-10-27）
+# G-A / G-B / G-C 状态（更新至 2026-11-08，v0.1.0）
 
-按 `ShortcutSense_v3_final_decision_2026-10-27.md` 执行。**未发布**，仓库保持 Private。
+按 `ShortcutSense_v3_final_decision_2026-10-27.md` 执行。**未公开发布**，仓库
+`AIMetaPhD/ShortcutSense` 保持 Private。本文记录的是代码与实测状态；公开发布是
+Owner 的单独决定。
 
 ---
 
@@ -88,16 +90,18 @@ Muse 第四轮静态审阅：10 项不变量全 PASS，指出 3 个问题（S2 �
 | 重启恢复 | **PASS** | 恢复时使用**完整列表**而不是首个 bundle（此处修了一个真实缺陷） |
 | Schema v3 加法迁移 | **PASS** | 旧行默认 `launch_app`，读回不丢失 |
 
-### 未完成（下一轮）
+### 已完成：受控 T1 / 自动 Learn / 手动标记（原「下一轮」）
 
-| 项 | 原因 |
-|---|---|
-| 受控 T1 Opt-in 与结构化序列聚合 | 尚未实现 |
-| 跨天重复应用组发现 → 生成工作区建议 | 依赖 T1 |
-| ManualMark 界面 | 尚未实现 |
-| Learn 推荐带来源/置信度 | 依赖 G-B 结论 |
-| 第一周诚实进度 + 快捷键速查 | 尚未实现 |
-| 本地模型对候选模式排序 | 未接线 |
+| 能力 | 状态 | 证据 |
+|---|---|---|
+| 受控 T1 Opt-in | **PASS** | Schema v4 新增 `t1_sessions`；默认关闭，界面写明采集范围；关闭时零写入 |
+| 结构化序列聚合 | **PASS** | 只存命令标识与重复次数，不存按键序列或时间戳 |
+| ManualMark 界面 | **PASS** | 「学习与工作区」页（⌘4）标记当前前台应用的菜单命令 |
+| 自动 Learn | **PASS（技术）** | 见 G-B；覆盖率 94/156，被拒项中无用户内容 |
+| 跨天重复应用组 → 工作区建议 | **PASS** | `PatternDiscovery.workspacePatterns`：2–3 个应用、≥2 个不同日期 |
+| 工作区一键应用 / 撤销 / 重启恢复 | **PASS** | `ShortcutActionManager.applyWorkspace`，恢复使用完整成员列表 |
+
+仍未做：本地模型对候选模式排序（未接线，不影响 v0.1.0 可用性）。
 
 ---
 
@@ -105,25 +109,18 @@ Muse 第四轮静态审阅：10 项不变量全 PASS，指出 3 个问题（S2 �
 
 | 项 | 结果 |
 |---|---|
-| 单元测试 | **220 项**，Linux 与 macOS 真机一致通过 |
-| macOS 构建 | 通过，证书签名，指定要求跨重建稳定 |
-| 应用部署 | `/Applications/ShortcutSense.app`，运行中 |
-| CI | 见仓库 Actions |
+| 单元测试 | **250 项，0 失败**，Linux 与 macOS 真机一致通过 |
+| 测试登记一致性 | `Scripts/check-test-registry.sh` 在 CI 中防止测试文件被静默跳过 |
+| macOS 构建 | 通过，本地证书签名，指定要求跨重建稳定 |
+| 应用部署 | `/Applications/ShortcutSense.app`，真机启动并采集 |
+| 数据库 | `pragma user_version = 4`；`journal_mode=wal` |
+| CI | Linux core + macOS 14 + macOS 15，构建/测试/打包/签名校验 |
 
 ---
 
-## 剩余阻断项
+## 剩余项（不是发布阻断，但尚未验证）
 
-1. **G-A 的 GUI 验收**（3 项）：需要人在 Mac 前操作
-2. **G-B 的真实点击测量**：需要人按协议点击 8 分钟；这是 G-C 里 Learn 是否可自动化的前提
-3. **G-C 的 T1/ManualMark/Learn**：等 G-B 结论决定 Learn 的形态，T1 可并行
-4. **公开发布**：未获批准，仓库保持 Private
-
-## 需要 Owner 的最小行动
-
-两件，按顺序：
-
-1. 按 `docs/qa/G-B-protocol.md` 跑一次 8 分钟的点击测量（这一步决定 Learn 走自动还是手动）
-2. 在应用里打开设置 → 本地 AI → 看模型是否显示 `qwen3.5:9b` → 到推荐详情点「用本地 AI 分析」，截个图
-
-其余我可以在你做完第 1 项后继续推进 T1 与 ManualMark。
+1. **真人鼠标点击菜单**：合成点击 18/18，但人手点击的时序差异未测量。
+2. **Gatekeeper 全新副本安装**：DMG 已能生成并签名，尚未在隔离副本上走「仍要打开」。
+3. **连续 7 天真实数据**：在此之前周报按设计显示 Preview。
+4. **公开发布**：未获 Owner 批准，仓库保持 Private；`v0.1.0` 只是私有存档标签。

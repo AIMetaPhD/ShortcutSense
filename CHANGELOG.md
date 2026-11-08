@@ -3,7 +3,9 @@
 All notable changes to this project are documented here. This project follows
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.1.0] - 2026-11-08
+
+First usable build, archived privately. 250 tests, 0 failures.
 
 ### Added
 
@@ -27,14 +29,21 @@ All notable changes to this project are documented here. This project follows
   no cookies and a hard timeout.
 - CI: Linux core job plus macOS 14 and macOS 15 build, test, bundle and signature
   verification.
+- Learn & Workspaces screen: controlled T1 opt-in, automatic menu-command learning,
+  manual marking of the frontmost app, and workspace suggestions across days.
+- Workspace apply/undo with Carbon hotkeys; restore uses the full member list.
+- Schema v4 adds `t1_sessions`; migration is additive and read-back verified.
 
 ### Known limitations
 
-- Automatic menu-command learning is disabled until AX menu hit-testing is proven on
-  a real Mac.
+- Menu-command titles are filtered by a closed vocabulary plus a command-shape rule.
+  On a Chinese-locale Mac this accepts 94 of 156 real commands; the 62 refusals contain
+  no user content. Refused commands are simply not learned.
+- Menu hit-testing was measured with synthetic clicks (18/18). A human mouse click has
+  not been measured.
 - Third-party global hotkeys cannot be enumerated; those combinations are reported
   as `unknown`, not as free.
-- No Developer ID or notarization yet; the community build is ad-hoc signed and
-  requires the Gatekeeper "Open Anyway" flow.
+- The build is signed with a self-signed certificate and is not notarized; it needs
+  the Gatekeeper "Open Anyway" flow. A clean-machine install has not been performed.
 - No seven-day real-world result has been observed; weekly review shows Preview until
   that data exists.
