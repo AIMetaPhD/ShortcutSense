@@ -17,7 +17,7 @@ marked as such rather than being reported as PASS.
 
 | ID | Requirement | Status | Evidence / reason |
 |---|---|---|---|
-| AC-01 | macOS-only build | **PASS** | Built and launched on the owner's Mac; process alive, database created. Also builds on macOS 14 and macOS 15 CI runners. No Windows/Linux product code in `Sources/`. |
+| AC-01 | macOS-only build | **PASS** | Built and launched on the owner's Mac; process alive, database created. Also builds on the macOS 15 and macOS 26 CI runners. No Windows/Linux product code in `Sources/`. |
 | AC-02 | Legal compliance | **PASS** | Root MIT `LICENSE`. `THIRD_PARTY_NOTICES.md` lists upstream commits and states no code was copied. HotkeyClash was never cloned. |
 | AC-03 | Fully local | **PASS** | No package dependencies. The only network path is `OptionalAI`, off by default, restricted to literal loopback (`127.0.0.1`, `::1`), no redirects, no cookies. Tests prove no call is made while disabled. |
 | AC-04 | Authorisation boundary | **PASS** | Both grants exist in TCC for the app itself: `kTCCServiceListenEvent=2`, `kTCCServiceAccessibility=2`, requested from the GUI session. Collection started (`first_collection_started_at` written). Grants survive rebuilds because signing uses a fixed certificate. *Not exercised:* revoke-while-running, sleep/wake, lock screen. |
@@ -34,7 +34,7 @@ marked as such rather than being reported as PASS.
 | AC-15 | No AI dependency | **PASS** | Core paths make no AI call; the template fallback is deterministic and tested. |
 | AC-16 | Local AI minimal grant | **PASS** | End-to-end against a real Ollama: discovery found `qwen3.5:9b` and `qwen3:14b`; one `/api/generate` returned in 9.4 s with `used_fallback=false`. The owner confirmed the UI state (`已连接，检测到 2 个本地模型`, `qwen3:14b (9.28 GB)`, 20,260 ms). Only the 9 fixed aggregate fields are sent. |
 | AC-17 | README reproducible | **PASS** | `README.md` documents build, signing, permissions, install and data deletion in English and Chinese. |
-| AC-18 | CI & tests | **PASS** | **250 tests, 0 failures** on the real Mac and in CI. CI runs Linux core, macOS 14 and macOS 15 build/test/bundle/signature jobs. `Scripts/check-test-registry.sh` fails CI if a test file is not registered, after two suites were silently skipped once. |
+| AC-18 | CI & tests | **PASS** | **250 tests, 0 failures** on the real Mac and in CI. CI runs Linux core plus macOS 15 and macOS 26 build/test/bundle/signature jobs. `Scripts/check-test-registry.sh` fails CI if a test file is not registered, after two suites were silently skipped once. |
 | AC-19 | Installable release | **PARTIAL** | `Scripts/package-dmg.sh` produces a DMG; `codesign --verify --deep --strict` passes. A clean-machine install through Gatekeeper's "Open Anyway" flow has **not** been performed. |
 | AC-20 | Public GitHub completion | **HELD** | `AIMetaPhD/ShortcutSense` exists and is synced, but is **private by the owner's decision**. Public release requires explicit approval. |
 | AC-21 | User privacy autonomy | **PASS (logic) / PARTIAL (GUI)** | Pause, exclusions, deletion, offline and AI-off are implemented and unit-tested; the owner exercised the AI switch and the main screens. Destructive controls were not pressed on the real Mac. |

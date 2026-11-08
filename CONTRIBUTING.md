@@ -36,8 +36,9 @@ swift test
 ./Scripts/build-app.sh
 ```
 
-CI runs the core on Linux and the full package on macOS 14 and macOS 15, including
-bundle assembly and `codesign --verify`.
+CI runs the core on Linux and the full package on macOS 15 and macOS 26, including
+bundle assembly and `codesign --verify`. (macOS 14 runners were retired from GitHub
+Actions on 2026-11-02; the deployment target is still macOS 14.)
 
 ## Testing expectations
 

@@ -48,7 +48,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-14, macos-15]
+        # macOS 14 images were retired from GitHub Actions on 2026-11-02; jobs that
+        # still request them are cancelled before they start. 15 and 26 are the
+        # supported arm64 images. The deployment target stays macOS 14.
+        os: [macos-15, macos-26]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4

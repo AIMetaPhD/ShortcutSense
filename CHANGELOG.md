@@ -27,7 +27,7 @@ First usable build, archived privately. 250 tests, 0 failures.
 - Optional loopback-only Ollama explanations with schema-limited output and a
   deterministic fallback, including a real `URLSession` transport with no redirects,
   no cookies and a hard timeout.
-- CI: Linux core job plus macOS 14 and macOS 15 build, test, bundle and signature
+- CI: Linux core job plus macOS 15 and macOS 26 build, test, bundle and signature
   verification.
 - Learn & Workspaces screen: controlled T1 opt-in, automatic menu-command learning,
   manual marking of the frontmost app, and workspace suggestions across days.

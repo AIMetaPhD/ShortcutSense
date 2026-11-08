@@ -114,7 +114,7 @@ Muse 第四轮静态审阅：10 项不变量全 PASS，指出 3 个问题（S2 �
 | macOS 构建 | 通过，本地证书签名，指定要求跨重建稳定 |
 | 应用部署 | `/Applications/ShortcutSense.app`，真机启动并采集 |
 | 数据库 | `pragma user_version = 4`；`journal_mode=wal` |
-| CI | Linux core + macOS 14 + macOS 15，构建/测试/打包/签名校验 |
+| CI | Linux core + macOS 15 + macOS 26，构建/测试/打包/签名校验 |
 
 ---
 
