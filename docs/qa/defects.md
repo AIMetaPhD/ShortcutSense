@@ -53,10 +53,10 @@ on a real Mac.
 | D-021 | S3 | FIXED (awaiting re-test) | `OptionalAI.parse(_:fallback:)` accepted a template it never returned; a malformed model answer threw to a caller whose fallback depended on code outside the reviewed file. | Same review, section F | `parse(_:)` no longer takes a fallback and always throws; the app layer explicitly substitutes `template(for:)` |
 | D-022 | S3 | FIXED (awaiting re-test) | Only `explanation` was screened for executable-looking text; `reason` is rendered in the same card and was unchecked. | Same review, section F | Both fields pass `looksExecutable` |
 | D-019 | S2 | FIXED (awaiting Muse re-test) | `--diagnose` reported permission values without saying that, under SSH, they describe the SSH session's TCC identity rather than the app's — an invitation to record a false "denied". | Same probe | Output now includes `launched_from_ssh_session` and an explicit attribution note |
-| D-041 | S2 | FIXED (static; runtime unverified) | **Raw T1 rows were never pruned.** `pruneT1` and `pruneHourly` existed but nothing called them, while the Learn screen promises "raw rows are pruned after 14 days". On a long-running install the raw sequence table grew without bound. | State-machine review, 2026-11-09 | `AppController.pruneRetainedDataIfNeeded()` runs at launch and once per local day (14 days for T1, 30 for hourly buckets) |
-| D-042 | S2 | FIXED (static; runtime unverified) | **The tap reported "blocked" after a timeout while it was collecting.** `tapDisabledByTimeout` re-enabled the tap but never restored the status, so `TodayModel.status` kept mapping `.disabledByTimeout` to `.blocked` until the tap was rebuilt by a later sleep/wake. | Same review | `reenableAfterDisable()` reads `CGEvent.tapIsEnabled` back and returns the status to `.running`; a port that refuses to re-enable is replaced |
-| D-043 | S2 | FIXED (static; runtime unverified) | **Ollama auto-start retried forever.** `apply` re-entered `startOllamaIfAllowed` every time the re-check still said "installed but not running"; the comment claimed "try once" but no flag existed, so a server that never came up was relaunched roughly every six seconds. | Same review | One-shot `didAttemptAutoStart`, reset only by an explicit user action (enabling AI, or allowing auto-start) |
-| D-044 | S3 | FIXED (static; runtime unverified) | **"Open dashboard → section" was ignored once the window existed.** `pendingSection` was written but never read, and `RootView` kept its selection in local `@State`, so a reused window always stayed on the last section. | Same review | `DashboardNavigation.shared.section`; `showWindow(section:)` routes through it, and `RootView` observes it |
+| D-041 | S2 | **FIXED (verified on the Mac, 2026-11-11)** | **Raw T1 rows were never pruned.** `pruneT1` and `pruneHourly` existed but nothing called them, while the Learn screen promises "raw rows are pruned after 14 days". On a long-running install the raw sequence table grew without bound. | State-machine review, 2026-11-09 | `AppController.pruneRetainedDataIfNeeded()` runs at launch and once per local day (14 days for T1, 30 for hourly buckets) |
+| D-042 | S2 | FIXED (normal state verified; timeout branch not exercised) | **The tap reported "blocked" after a timeout while it was collecting.** `tapDisabledByTimeout` re-enabled the tap but never restored the status, so `TodayModel.status` kept mapping `.disabledByTimeout` to `.blocked` until the tap was rebuilt by a later sleep/wake. | Same review | `reenableAfterDisable()` reads `CGEvent.tapIsEnabled` back and returns the status to `.running`; a port that refuses to re-enable is replaced |
+| D-043 | S2 | FIXED (static; precondition observed, loop not reproduced) | **Ollama auto-start retried forever.** `apply` re-entered `startOllamaIfAllowed` every time the re-check still said "installed but not running"; the comment claimed "try once" but no flag existed, so a server that never came up was relaunched roughly every six seconds. | Same review | One-shot `didAttemptAutoStart`, reset only by an explicit user action (enabling AI, or allowing auto-start) |
+| D-044 | S3 | FIXED (static; GUI not exercised) | **"Open dashboard → section" was ignored once the window existed.** `pendingSection` was written but never read, and `RootView` kept its selection in local `@State`, so a reused window always stayed on the last section. | Same review | `DashboardNavigation.shared.section`; `showWindow(section:)` routes through it, and `RootView` observes it |
 
 ## Blocked — cannot be exercised without a real Mac desktop
 
@@ -84,6 +84,19 @@ on a real Mac.
 Muse-3's own scope note: the database wrapper, `AttributionBuffer` and app-layer call
 sites were outside the 13 supplied files, so its conclusions on those chains are
 marked unverified rather than assumed.
+
+## Runtime verification on the Mac — 2026-11-11
+
+Deployed commit `632ded8`; `Scripts/test-without-xcode.sh` reported 250 tests,
+0 failures; `/Applications/ShortcutSense.app` was replaced, relaunched and its
+signature verified.
+
+| Check | Result |
+|---|---|
+| D-041 pruning | Inserted T1 rows dated 2026-10-20 and 2026-11-11, restarted the app: the 22-day-old row was deleted and the current one kept. Both test rows removed afterwards. |
+| D-042 tap status | After relaunch `tap_status=running`. The timeout branch itself was not exercised — inducing one requires SIGSTOP/SIGCONT on the remote process, which this session's permission policy refused. |
+| D-043 Ollama | Precondition observed: app installed, service not running, AI enabled. `--ai-probe` reported `installed_not_running` in 9 ms and started nothing. The retry loop was not reproduced because it needs the Settings screen to drive discovery. |
+| D-044 section routing | Not exercised; requires a GUI click, which an SSH session cannot perform without Accessibility. |
 
 ## Closed
 
