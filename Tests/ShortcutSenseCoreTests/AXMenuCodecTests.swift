@@ -66,7 +66,7 @@ final class AXMenuCodecTests: XCTestCase {
     }
 
     func testPathsAreRejected() {
-        for title in ["/Users/the-owner/Documents", "~/Desktop", "C:\\Users\\the-owner", "Open: secret"] {
+        for title in ["/Users/example/Documents", "~/Desktop", "C:\\Users\\the-owner", "Open: secret"] {
             XCTAssertFalse(AXMenuCodec.isSafeStaticTitle(title), "\(title) contains a path")
         }
     }

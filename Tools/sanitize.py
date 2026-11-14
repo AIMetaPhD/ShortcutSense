@@ -2,10 +2,9 @@
 
 Run from the repository root:  python Tools/sanitize.py
 
-The identifiers are assembled at runtime rather than written literally, so this
-file — which has to live in the repository to be useful — does not itself contain
-the strings it removes. The script skips its own path, so it is idempotent and safe
-to re-run after any edit.
+Every rule matches the *shape* of an account name, home path or staging URL, so
+this file never stores a value it is meant to remove. That keeps the sanitizer
+safe to publish alongside the code it sanitizes.
 """
 
 import os
@@ -13,37 +12,17 @@ import re
 import sys
 
 
-def _s(*parts):
-    """Joins fragments so the sensitive literal never appears in this source."""
-    return ''.join(parts)
-
-
-WORD = r'\b'
-
 SUBS = [
-    # Local account names on the development machine and on the target Mac.
-    (WORD + _s('example', 'user') + WORD, 'the-owner'),
-    (WORD + _s('example') + WORD, 'the-owner'),
-    (_s('{{USERNAME_', 'gajs5wuf}}'), 'the-owner'),
-    (_s('{{USERNAME_', '2enyv35g}}'), 'the-owner'),
-    (_s('{{USERNAME_', '5tg55gdw}}'), 'the-owner'),
-    # The account that hosted the retired staging repository. Matched by the shape of
-    # the URL rather than by the literal name, so this file never contains it.
+    # Home directories: keep the structure, replace the account name.
+    (r'/Users/[A-Za-z0-9._-]+', '/Users/example'),
+    (r'C:\\Users\\[A-Za-z0-9._-]+', 'C:\\Users\\example'),
+    # The retired staging repository, matched by URL shape rather than by name.
     (r'github\.com/[A-Za-z0-9_.-]+/ShortcutSense-staging',
      'github.com/<account>/ShortcutSense-staging'),
     (r'`[A-Za-z0-9_.-]+/ShortcutSense-staging`',
      '`<account>/ShortcutSense-staging`'),
-    # Machine hostnames and Tailscale addresses.
-    (_s('{{HOSTNAME_', '7nxeug5z}}'), '<mac-hostname>'),
-    (_s('{{HOSTNAME_', 'ysmkbpsb}}'), '<mac-hostname>'),
-    (_s('{{HOSTNAME_', 'ut5nnfi6}}'), '<workstation-hostname>'),
-    (WORD + _s('mac', 'book') + WORD, '<mac-hostname>'),
-    (_s('100', r'\.113', r'\.5', r'\.29'), '<mac-ip>'),
-    (_s('100', r'\.70', r'\.141', r'\.110'), '<muse-ip>'),
-    (_s('100', r'\.111', r'\.90', r'\.123'), '<workstation-ip>'),
-    # Absolute home paths.
-    (_s('/Users/', 'example'), '/Users/example'),
-    (_s('C:', '\\\\Users\\\\', 'example'), 'C:\\\\Users\\\\example'),
+    # Machine names.
+    (r'\bmacbook\b', '<mac-hostname>'),
 ]
 
 SKIP_DIRS = {'.git', '.build', 'artifacts', 'release', 'Tools/TestRunner/Tests'}

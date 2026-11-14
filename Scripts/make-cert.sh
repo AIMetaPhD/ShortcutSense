@@ -15,7 +15,7 @@ set -euo pipefail
 
 NAME="ShortcutSense Local Signing"
 KEYCHAIN="$HOME/ss-cert/ss.keychain"
-PASSWORD="${KEYCHAIN_PASSWORD:-REDACTED}"
+PASSWORD="${KEYCHAIN_PASSWORD:?set KEYCHAIN_PASSWORD to a passphrase for the local signing keychain}"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 

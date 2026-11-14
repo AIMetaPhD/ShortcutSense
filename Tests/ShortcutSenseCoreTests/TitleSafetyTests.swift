@@ -24,7 +24,7 @@ final class TitleSafetyTests: XCTestCase {
     }
 
     func testPathsAndPunctuationAreRefused() {
-        for title in ["/Users/someone/Documents", "~/Desktop", "a:b", "a|b", "a?b"] {
+        for title in ["/Users/example/Documents", "~/Desktop", "a:b", "a|b", "a?b"] {
             XCTAssertFalse(AXMenuCodec.isSafeStaticTitle(title), title)
         }
     }
