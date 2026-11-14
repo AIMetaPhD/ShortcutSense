@@ -1,8 +1,7 @@
 # G-A / G-B / G-C 状态（更新至 2026-11-08，v0.1.0）
 
-按 `ShortcutSense_v3_final_decision_2026-10-27.md` 执行。**未公开发布**，仓库
-`AIMetaPhD/ShortcutSense` 保持 Private。本文记录的是代码与实测状态；公开发布是
-Owner 的单独决定。
+按 `ShortcutSense_v3_final_decision_2026-10-27.md` 执行。仓库
+`AIMetaPhD/ShortcutSense` 已于 2026-11-15 公开。本文记录的是代码与实测状态。
 
 ---
 

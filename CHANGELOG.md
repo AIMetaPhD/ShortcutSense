@@ -5,7 +5,7 @@ All notable changes to this project are documented here. This project follows
 
 ## [0.1.0] - 2026-11-08
 
-First usable build, archived privately. 250 tests, 0 failures.
+First public release. 250 tests, 0 failures.
 
 ### Added
 

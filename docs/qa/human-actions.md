@@ -21,7 +21,7 @@
 
 | 动作 | 当前状态 |
 |---|---|
-| 把 `AIMetaPhD/ShortcutSense` 改为 Public | **未批准，保持 Private** |
+| 把 `AIMetaPhD/ShortcutSense` 改为 Public | **已完成（2026-11-15）** |
 | 创建 GitHub Release / 上传 DMG | 未批准 |
 | 在 `AIMetaPhD/AIMetaPhD` 主页加一行项目链接 | 未批准 |
 | 换用 Developer ID 并公证 | 需要 Apple Developer 账号（年费），当前自签名可用 |
